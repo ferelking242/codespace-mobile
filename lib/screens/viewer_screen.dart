@@ -3,9 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import '../theme.dart';
 
-// ─── Platform channel for foreground service ────────────────────────────────
+// ─── Platform channel ────────────────────────────────────────────────────────
 const _serviceChannel = MethodChannel('com.codespace.mobile/service');
-
 Future<void> _startBgService() async {
   try { await _serviceChannel.invokeMethod('startService'); } catch (_) {}
 }
@@ -13,148 +12,211 @@ Future<void> _stopBgService() async {
   try { await _serviceChannel.invokeMethod('stopService'); } catch (_) {}
 }
 
-// ─── VS Code mobile CSS ──────────────────────────────────────────────────────
+// ─── CSS ─────────────────────────────────────────────────────────────────────
+// NOTE: All !important rules are intentional — VS Code web injects its own
+// inline styles and we must override them unconditionally.
 const _vscodeCss = r"""
-/* ── Codespace Mobile patch v1.2 ── */
+/* ══ Codespace Mobile v1.3 ═════════════════════════════════════════════════ */
 
-/* Activity bar: always hidden */
+/* ── CSS variables override ─────────────────────────────────────────────── */
+:root {
+  --activity-bar-width: 0px !important;
+  --activitybar-width: 0px !important;
+  --sidebar-width: 0px !important;
+}
+
+/* ── Activity bar: NUCLEAR kill ─────────────────────────────────────────── */
+/* VS Code may use any of these selectors across versions */
 .part.activitybar,
-.monaco-workbench .activitybar {
+.activitybar.part,
+.monaco-workbench .part.activitybar,
+.monaco-workbench > .part.activitybar,
+div.part.activitybar,
+[class*="activitybar"][class*="part"],
+#workbench\.parts\.activitybar,
+.activityBarContent,
+.activity-bar {
   display: none !important;
   width: 0 !important;
   min-width: 0 !important;
+  max-width: 0 !important;
+  overflow: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  flex: 0 0 0 !important;
+  position: absolute !important;
+  left: -9999px !important;
 }
 
-/* Sidebar: hidden by default, shown via body.cm-sidebar-on */
-body:not(.cm-sidebar-on) .part.sidebar {
+/* ── Secondary sidebar (Copilot chat panel) toggle ──────────────────────── */
+body:not(.cm-copilot-on) .part.auxiliarybar,
+body:not(.cm-copilot-on) .auxiliary-bar,
+body:not(.cm-copilot-on) [class*="auxiliarybar"] {
   display: none !important;
   width: 0 !important;
+  max-width: 0 !important;
+  overflow: hidden !important;
+  flex: 0 0 0 !important;
+}
+body.cm-copilot-on .part.auxiliarybar,
+body.cm-copilot-on .auxiliary-bar {
+  display: flex !important;
+  width: 320px !important;
+  min-width: 280px !important;
+  max-width: 320px !important;
+  position: relative !important;
+  z-index: 50 !important;
+  overflow: hidden !important;
+}
+
+/* ── Left sidebar (file tree) ───────────────────────────────────────────── */
+body:not(.cm-sidebar-on) .part.sidebar,
+body:not(.cm-sidebar-on) .sidebar.part {
+  display: none !important;
+  width: 0 !important;
+  min-width: 0 !important;
+  max-width: 0 !important;
+  overflow: hidden !important;
+  flex: 0 0 0 !important;
 }
 body.cm-sidebar-on .part.sidebar {
   display: flex !important;
-  width: 260px !important;
-  min-width: 260px !important;
+  width: 240px !important;
+  min-width: 240px !important;
+  max-width: 240px !important;
   position: relative !important;
   z-index: 50 !important;
+  overflow: hidden !important;
 }
 
-/* Editor fills screen */
-body:not(.cm-sidebar-on) .part.editor,
-body:not(.cm-sidebar-on) .monaco-workbench .part.editor {
+/* ── Editor: always fills remaining width ───────────────────────────────── */
+.part.editor,
+.monaco-workbench .part.editor,
+.editor-container,
+.editorContainer {
+  flex: 1 1 auto !important;
+  width: auto !important;
+  min-width: 0 !important;
   left: 0 !important;
-  width: 100vw !important;
-}
-body.cm-sidebar-on .part.editor {
-  left: 260px !important;
-  width: calc(100vw - 260px) !important;
 }
 
-/* Bigger tabs */
-.tabs-and-actions-container { height: 46px !important; }
-.tabs-container .tab { height: 46px !important; padding: 0 14px !important; }
+/* ── Workbench: force full-width horizontal flex ────────────────────────── */
+.monaco-workbench .monaco-grid-view,
+.monaco-workbench .monaco-grid-branch-node,
+.monaco-workbench .split-view-view {
+  overflow: visible !important;
+}
+
+/* ── VS Code top toolbar (breadcrumbs / nav bar) ─────────────────────────── */
+.editor-toolbar,
+.breadcrumbs-control,
+.title.tabs-container ~ .toolbar,
+.editor-group-container .title .title-label { font-size: 12px !important; }
+
+/* ── Bigger tabs for touch ───────────────────────────────────────────────── */
+.tabs-and-actions-container,
+.monaco-workbench .part.editor .tabs-and-actions-container {
+  height: 44px !important;
+  min-height: 44px !important;
+}
+.tabs-container .tab { height: 44px !important; padding: 0 12px !important; }
 .tab-label { font-size: 13px !important; }
 
-/* Status bar */
-.part.statusbar { height: 30px !important; }
+/* ── Status bar ──────────────────────────────────────────────────────────── */
+.part.statusbar {
+  height: 26px !important;
+  min-height: 26px !important;
+}
 .statusbar-item a, .statusbar-item { font-size: 11px !important; }
 
-/* Touch-friendly scrolling */
-.monaco-scrollable-element { -webkit-overflow-scrolling: touch !important; }
-
-/* Fix pointer events for overlays / dropdowns / quick-pick */
-.quick-input-widget,
-.monaco-quick-input-widget,
-.quick-input-list,
-.quick-input-list .monaco-list-row,
-.context-menu,
-.context-view,
-.action-item,
-.menubar-menu-button,
-.monaco-dropdown,
-.dropdown,
-.dropdown-menu,
-.select-container,
-.select-container select,
-.monaco-select-box,
-.notification-toast,
-.notifications-toasts,
-.dialog-box,
-.dialog-shadow,
-.monaco-dialog-box {
-  pointer-events: auto !important;
-  touch-action: manipulation !important;
-  -webkit-tap-highlight-color: rgba(47,129,247,0.15) !important;
-}
-
-/* Copilot chat panel */
-.chat-widget,
-.inline-chat-widget,
-.interactive-session,
-.chat-input-part {
-  pointer-events: auto !important;
-  touch-action: manipulation !important;
-  z-index: 100 !important;
-}
-
-/* Terminal */
-.part.panel { min-height: 180px !important; }
+/* ── Terminal panel ──────────────────────────────────────────────────────── */
+.part.panel { min-height: 160px !important; }
 .xterm { font-size: 13px !important; }
 .xterm-viewport { touch-action: pan-y !important; }
+.xterm-screen canvas { touch-action: none !important; }
+
+/* ── Touch-friendly scrolling ────────────────────────────────────────────── */
+.monaco-scrollable-element {
+  -webkit-overflow-scrolling: touch !important;
+}
+
+/* ── Pointer events: overlays, quick-pick, model picker ─────────────────── */
+.quick-input-widget, .monaco-quick-input-widget,
+.quick-input-list, .quick-input-list .monaco-list-row,
+.context-menu, .context-view,
+.action-item, .menubar-menu-button,
+.monaco-dropdown, .dropdown, .dropdown-menu,
+.select-container, .select-container select, .monaco-select-box,
+.notification-toast, .notifications-toasts,
+.dialog-box, .dialog-shadow, .monaco-dialog-box,
+.suggest-widget, .parameter-hints-widget,
+[role="option"], [role="menuitem"], [role="listbox"] {
+  pointer-events: auto !important;
+  touch-action: manipulation !important;
+  -webkit-tap-highlight-color: rgba(47,129,247,0.18) !important;
+  z-index: 2000 !important;
+}
+
+/* ── Copilot chat ────────────────────────────────────────────────────────── */
+.chat-widget, .inline-chat-widget,
+.interactive-session, .chat-input-part,
+.chat-list-item { pointer-events: auto !important; touch-action: manipulation !important; }
+
+/* ── Quick-pick items: larger hit targets ────────────────────────────────── */
+.quick-input-list .monaco-list-row {
+  min-height: 40px !important;
+  line-height: 40px !important;
+}
+
+/* ── Copilot chat input: auto height ─────────────────────────────────────── */
+.interactive-input-box .input { min-height: 48px !important; }
 """;
 
-// ─── JS: CSS + MutationObserver + touch bridge + heartbeat + auto-reconnect ──
+// ─── Main VS Code JS patch ───────────────────────────────────────────────────
 String _buildVscodeJs() => r"""
 (function() {
   'use strict';
-  if (window.__cmPatchInstalled) return;
-  window.__cmPatchInstalled = true;
+  if (window.__cmPatch14) return;
+  window.__cmPatch14 = true;
 
-  // ── 1. CSS injection ──────────────────────────────────────────────────────
+  /* 1 ── CSS injection ───────────────────────────────────────────────────── */
   var CSS = `""" + _vscodeCss.replaceAll('`', r'\`') + r"""`;
 
   function injectCss() {
-    var el = document.getElementById('cm-patch-v4');
+    var el = document.getElementById('cm-patch-v5');
     if (!el) {
       el = document.createElement('style');
-      el.id = 'cm-patch-v4';
-      (document.head || document.documentElement).appendChild(el);
+      el.id = 'cm-patch-v5';
+      document.head
+        ? document.head.appendChild(el)
+        : document.documentElement.appendChild(el);
     }
     el.textContent = CSS;
   }
 
   injectCss();
 
-  new MutationObserver(injectCss).observe(
-    document.documentElement, { childList: true, subtree: false }
-  );
-
-  var t = 0;
-  var cssIv = setInterval(function() {
+  /* Re-inject whenever VS Code rebuilds the DOM */
+  new MutationObserver(function(muts) {
     injectCss();
-    if (++t > 30) clearInterval(cssIv);
-  }, 1000);
+    /* Force-remove activity bar inline style if VS Code re-adds width */
+    document.querySelectorAll('.part.activitybar, .activitybar.part').forEach(function(el) {
+      el.style.setProperty('display', 'none', 'important');
+      el.style.setProperty('width', '0', 'important');
+      el.style.setProperty('max-width', '0', 'important');
+    });
+  }).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['style','class'] });
 
-  // ── 2. Viewport ───────────────────────────────────────────────────────────
+  /* Retry for 60s (VS Code lazy-loads components) */
+  var t = 0;
+  var cssIv = setInterval(function() { injectCss(); if (++t > 60) clearInterval(cssIv); }, 1000);
+
+  /* 2 ── Viewport ────────────────────────────────────────────────────────── */
   var meta = document.querySelector('meta[name=viewport]');
-  if (!meta) {
-    meta = document.createElement('meta');
-    meta.name = 'viewport';
-    document.head.appendChild(meta);
-  }
+  if (!meta) { meta = document.createElement('meta'); meta.name = 'viewport'; document.head.appendChild(meta); }
   meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes';
 
-  // ── 3. Touch → Mouse event bridge ────────────────────────────────────────
-  function synthesize(type, touch, target) {
-    var evt = new MouseEvent(type, {
-      bubbles: true, cancelable: true,
-      view: window, detail: 1,
-      screenX: touch.screenX, screenY: touch.screenY,
-      clientX: touch.clientX, clientY: touch.clientY,
-      button: 0, buttons: type === 'mousedown' ? 1 : 0
-    });
-    target.dispatchEvent(evt);
-  }
-
+  /* 3 ── Touch → Mouse bridge (fixes model picker, quick-pick, dropdowns) ── */
   var INTERACTIVE = [
     '.quick-input-widget', '.context-menu', '.context-view',
     '.monaco-dropdown', '.dropdown-menu', '.select-container',
@@ -162,16 +224,25 @@ String _buildVscodeJs() => r"""
     '.chat-widget', '.interactive-session .chat-input-part button',
     '.codicon', '.monaco-icon-label', '.quick-input-action',
     '[role="option"]', '[role="menuitem"]', '[role="button"]',
-    '.suggest-widget', '.parameter-hints-widget'
+    '.suggest-widget .monaco-list-row',
+    '.parameter-hints-widget', '.notification-list-item',
+    '.monaco-dialog-box button'
   ].join(',');
+
+  function synth(type, touch, target) {
+    target.dispatchEvent(new MouseEvent(type, {
+      bubbles: true, cancelable: true, view: window, detail: 1,
+      screenX: touch.screenX, screenY: touch.screenY,
+      clientX: touch.clientX, clientY: touch.clientY,
+      button: 0, buttons: type === 'mousedown' ? 1 : 0
+    }));
+  }
 
   document.addEventListener('touchstart', function(e) {
     var el = e.target;
     if (el.closest && el.closest(INTERACTIVE)) {
       var tc = e.touches[0];
-      synthesize('mouseover', tc, el);
-      synthesize('mouseenter', tc, el);
-      synthesize('mousedown', tc, el);
+      synth('mouseover', tc, el); synth('mouseenter', tc, el); synth('mousedown', tc, el);
     }
   }, { passive: true });
 
@@ -179,12 +250,11 @@ String _buildVscodeJs() => r"""
     var el = e.target;
     if (el.closest && el.closest(INTERACTIVE)) {
       var tc = e.changedTouches[0];
-      synthesize('mouseup', tc, el);
-      synthesize('click',   tc, el);
+      synth('mouseup', tc, el); synth('click', tc, el);
     }
   }, { passive: true });
 
-  // Fix <select> elements (model picker)
+  /* Patch <select> for model picker (native select sometimes used) */
   function patchSelects() {
     document.querySelectorAll('select').forEach(function(s) {
       s.style.pointerEvents = 'auto';
@@ -196,80 +266,56 @@ String _buildVscodeJs() => r"""
     document.body || document.documentElement, { childList: true, subtree: true }
   );
 
-  // ── 4. Heartbeat — keeps WebSocket alive every 20s ───────────────────────
-  // Strategy: fetch a tiny resource from github.com so the radio stays active.
-  // Even if it fails, it prevents the system from assuming the connection is idle.
+  /* 4 ── Heartbeat every 20s: keeps WiFi radio + WebSocket alive ──────────── */
   function heartbeat() {
     try {
-      fetch('https://github.com/favicon.ico', {
-        mode: 'no-cors', cache: 'no-store',
-        signal: AbortSignal.timeout(5000)
-      }).catch(function() {});
-    } catch(_) {}
+      fetch('https://github.com/favicon.ico', { mode: 'no-cors', cache: 'no-store',
+        signal: AbortSignal.timeout(5000) }).catch(function(){});
+    } catch(_){}
   }
   heartbeat();
-  var heartbeatTimer = setInterval(heartbeat, 20000);
+  setInterval(heartbeat, 20000);
 
-  // ── 5. Auto-reconnect on visibility restore ───────────────────────────────
-  // When the user returns to the app after backgrounding, VS Code sometimes
-  // shows "offline". We detect this and auto-click the reconnect button,
-  // or reload as a last resort.
+  /* 5 ── Auto-reconnect when app returns to foreground ───────────────────── */
   var _wasHidden = false;
-
-  function tryReconnect() {
-    // VS Code shows a reload button — click it automatically
-    var btn = document.querySelector(
-      '.reload-window, [class*="reload"], [aria-label*="Reload"], ' +
-      '[title*="Reload"], .messageActions .monaco-button'
-    );
-    if (btn) { btn.click(); return; }
-
-    // GitHub Codespaces "offline" error page
-    var offlineEl = document.querySelector(
-      '[data-testid="offline-error"], .offline-error, ' +
-      'button[data-action="reconnect"], [aria-label*="Reconnect"]'
-    );
-    if (offlineEl) { offlineEl.click(); return; }
-
-    // Last resort: if URL still points to a codespace, do a soft reload
-    if (window.location.href.includes('.github.dev') ||
-        window.location.href.includes('vscode.dev')) {
-      window.location.reload();
-    }
-  }
-
   document.addEventListener('visibilitychange', function() {
-    if (document.hidden) {
-      _wasHidden = true;
-    } else if (_wasHidden) {
-      _wasHidden = false;
-      // Small delay so VS Code has time to detect reconnect state
-      setTimeout(tryReconnect, 1500);
-      setTimeout(tryReconnect, 4000);
-      heartbeat();
-    }
+    if (document.hidden) { _wasHidden = true; return; }
+    if (!_wasHidden) return;
+    _wasHidden = false;
+    heartbeat();
+    setTimeout(function() {
+      /* VS Code "Reload window" button */
+      var btn = document.querySelector(
+        '.reload-window, [class*="reload"][class*="button"], ' +
+        '[aria-label*="Reload Window"], button[data-action="reconnect"], ' +
+        '[aria-label*="Reconnect"], [title*="Reload"]'
+      );
+      if (btn) { btn.click(); return; }
+      /* GitHub Codespaces "offline" page */
+      var offline = document.querySelector('[data-testid="offline-error"] button');
+      if (offline) { offline.click(); return; }
+      /* Last resort: soft reload if still on a codespace URL */
+      var h = window.location.href;
+      if (h.includes('.github.dev') || h.includes('vscode.dev')) window.location.reload();
+    }, 1500);
+    setTimeout(function() { heartbeat(); }, 4000);
   });
 
-  // ── 6. Web Locks API — prevent background throttling ─────────────────────
+  /* 6 ── Web Locks: prevent background JS throttling ─────────────────────── */
   if (navigator.locks && navigator.locks.request) {
-    navigator.locks.request(
-      'cm_keepalive',
-      { mode: 'shared' },
-      function(lock) {
-        return new Promise(function() {}); // never resolves → lock held forever
-      }
-    );
+    navigator.locks.request('cm_keepalive', { mode: 'shared' }, function() {
+      return new Promise(function() {});
+    });
   }
 
 })();
 """;
 
-// ─── JS: toggle sidebar ──────────────────────────────────────────────────────
-const _toggleSidebarJs = r"""
-(function() { document.body.classList.toggle('cm-sidebar-on'); })();
-""";
+// ─── Sidebar toggles ─────────────────────────────────────────────────────────
+const _toggleSidebarJs  = r"(function(){document.body.classList.toggle('cm-sidebar-on');})();";
+const _toggleCopilotJs  = r"(function(){document.body.classList.toggle('cm-copilot-on');})();";
 
-// ────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 
 class ViewerScreen extends StatefulWidget {
   final String initialUrl;
@@ -283,10 +329,11 @@ class _ViewerScreenState extends State<ViewerScreen>
     with WidgetsBindingObserver {
   late WebViewController _wvc;
   bool _loading = true;
-  int _progress = 0;
-  String _title = 'Codespaces';
-  bool _isVSCode = false;
-  bool _sidebarOn = false;
+  int  _progress = 0;
+  String _title    = 'Codespaces';
+  bool _isVSCode   = false;
+  bool _sidebarOn  = false;
+  bool _copilotOn  = false;
 
   @override
   void initState() {
@@ -300,13 +347,14 @@ class _ViewerScreenState extends State<ViewerScreen>
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(AppTheme.bg)
       ..setUserAgent(
-        'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 '
-        '(KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36',
+        'Mozilla/5.0 (Linux; Android 14; Pixel 9) AppleWebKit/537.36 '
+        '(KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36',
       )
       ..setNavigationDelegate(NavigationDelegate(
         onPageStarted: (url) => setState(() {
           _loading = true;
           _sidebarOn = false;
+          _copilotOn = false;
           _isVSCode = _isVSCodeUrl(url);
           _title = _titleFrom(url);
         }),
@@ -318,12 +366,11 @@ class _ViewerScreenState extends State<ViewerScreen>
             _title = _titleFrom(url);
           });
           if (_isVSCode) {
-            // Inject immediately + after VS Code finishes lazy loading
-            await _wvc.runJavaScript(_buildVscodeJs());
+            await _inject();
             await Future.delayed(const Duration(seconds: 2));
-            await _wvc.runJavaScript(_buildVscodeJs());
+            await _inject();
             await Future.delayed(const Duration(seconds: 5));
-            await _wvc.runJavaScript(_buildVscodeJs());
+            await _inject();
             _startBgService();
           }
         },
@@ -333,9 +380,11 @@ class _ViewerScreenState extends State<ViewerScreen>
       ..loadRequest(Uri.parse(widget.initialUrl));
   }
 
+  Future<void> _inject() => _wvc.runJavaScript(_buildVscodeJs());
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Service + WakeLock handle background — nothing to do here
+    // WakeLock + WifiLock handle background — nothing needed here
   }
 
   @override
@@ -354,9 +403,8 @@ class _ViewerScreenState extends State<ViewerScreen>
     final uri = Uri.tryParse(url);
     if (uri == null) return 'GitHub';
     if (_isVSCodeUrl(url)) {
-      final name = uri.host.split('.').first;
-      final parts = name.split('-');
-      return parts.length >= 2 ? '${parts[0]}/${parts[1]}' : name;
+      final parts = uri.host.split('.').first.split('-');
+      return parts.length >= 2 ? '${parts[0]}/${parts[1]}' : uri.host.split('.').first;
     }
     if (uri.path.startsWith('/codespaces')) return 'Codespaces';
     if (uri.host == 'github.com') return 'GitHub';
@@ -366,6 +414,11 @@ class _ViewerScreenState extends State<ViewerScreen>
   Future<void> _toggleSidebar() async {
     await _wvc.runJavaScript(_toggleSidebarJs);
     setState(() => _sidebarOn = !_sidebarOn);
+  }
+
+  Future<void> _toggleCopilot() async {
+    await _wvc.runJavaScript(_toggleCopilotJs);
+    setState(() => _copilotOn = !_copilotOn);
   }
 
   @override
@@ -393,7 +446,7 @@ class _ViewerScreenState extends State<ViewerScreen>
                 value: _progress > 0 ? _progress / 100 : null,
                 backgroundColor: Colors.transparent,
                 valueColor: const AlwaysStoppedAnimation(AppTheme.accent),
-                minHeight: 3,
+                minHeight: 2,
               ),
             ),
         ]),
@@ -407,8 +460,9 @@ class _ViewerScreenState extends State<ViewerScreen>
       elevation: 0,
       scrolledUnderElevation: 0,
       surfaceTintColor: Colors.transparent,
+      // Back button
       leading: IconButton(
-        icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+        icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
         color: AppTheme.muted,
         onPressed: () async {
           if (await _wvc.canGoBack()) {
@@ -419,20 +473,20 @@ class _ViewerScreenState extends State<ViewerScreen>
           }
         },
       ),
+      // Title with live indicator
       title: Row(children: [
-        if (_isVSCode) ...[
+        if (_isVSCode)
           Container(
-            width: 8, height: 8,
-            margin: const EdgeInsets.only(right: 8),
+            width: 7, height: 7,
+            margin: const EdgeInsets.only(right: 7),
             decoration: const BoxDecoration(
               color: AppTheme.green, shape: BoxShape.circle),
           ),
-        ],
         Expanded(
           child: Text(
             _title,
             style: TextStyle(
-              fontSize: 15,
+              fontSize: 14,
               fontWeight: FontWeight.w600,
               color: _isVSCode ? AppTheme.text : AppTheme.textSub,
               letterSpacing: -0.2,
@@ -442,23 +496,32 @@ class _ViewerScreenState extends State<ViewerScreen>
           ),
         ),
       ]),
+      // Action buttons
       actions: [
         if (_isVSCode) ...[
+          // File tree toggle
           _barBtn(
-            _sidebarOn ? Icons.view_sidebar : Icons.view_sidebar_outlined,
+            _sidebarOn ? Icons.folder_open_rounded : Icons.folder_outlined,
             _sidebarOn ? AppTheme.accent : AppTheme.muted,
             _toggleSidebar,
+            tooltip: 'Fichiers',
+          ),
+          // Copilot toggle
+          _barBtn(
+            Icons.auto_awesome_rounded,
+            _copilotOn ? AppTheme.accent : AppTheme.muted,
+            _toggleCopilot,
+            tooltip: 'Copilot',
           ),
         ],
+        // Refresh
         _barBtn(
           Icons.refresh_rounded,
           AppTheme.muted,
-          () {
-            setState(() => _loading = true);
-            _wvc.reload();
-          },
+          () { setState(() => _loading = true); _wvc.reload(); },
+          tooltip: 'Rafraîchir',
         ),
-        const SizedBox(width: 4),
+        const SizedBox(width: 2),
       ],
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(1),
@@ -467,13 +530,16 @@ class _ViewerScreenState extends State<ViewerScreen>
     );
   }
 
-  Widget _barBtn(IconData icon, Color color, VoidCallback onTap) {
-    return IconButton(
-      icon: Icon(icon, size: 21, color: color),
-      onPressed: onTap,
-      style: IconButton.styleFrom(
-        minimumSize: const Size(44, 44),
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+  Widget _barBtn(IconData icon, Color color, VoidCallback onTap, {String? tooltip}) {
+    return Tooltip(
+      message: tooltip ?? '',
+      child: IconButton(
+        icon: Icon(icon, size: 20, color: color),
+        onPressed: onTap,
+        style: IconButton.styleFrom(
+          minimumSize: const Size(40, 40),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
       ),
     );
   }

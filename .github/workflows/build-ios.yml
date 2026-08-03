@@ -1,0 +1,136 @@
+name: Build iOS IPA (TrollStore / arm64)
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Build reason'
+        required: false
+        default: 'manual'
+
+jobs:
+  build-ios:
+    name: Build iOS IPA
+    runs-on: macos-latest
+    timeout-minutes: 60
+
+    steps:
+      # ── 1. Checkout ──────────────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── 2. Java (required by Flutter tooling) ────────────────────────────
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # ── 3. Flutter ───────────────────────────────────────────────────────
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.22.x"
+          channel: stable
+          cache: true
+
+      - name: Flutter version
+        run: flutter --version
+
+      # ── 4. Dependencies ──────────────────────────────────────────────────
+      - name: Get dependencies
+        run: flutter pub get
+
+      # ── 5. Generate iOS platform (not committed to repo) ─────────────────
+      - name: Create iOS platform
+        run: flutter create --platforms=ios . --no-overwrite
+
+      # ── 6. Patch Podfile: minimum iOS 14.0 (supports 15.8.5) ─────────────
+      - name: Patch Podfile (iOS 14.0+)
+        run: |
+          sed -i '' "s/# platform :ios, '12.0'/platform :ios, '14.0'/" ios/Podfile
+          sed -i '' "s/platform :ios, '[0-9.]*/platform :ios, '14.0/" ios/Podfile
+          # Force minimum deployment target
+          echo "" >> ios/Podfile
+          echo "post_install do |installer|" >> ios/Podfile
+          echo "  installer.pods_project.targets.each do |target|" >> ios/Podfile
+          echo "    flutter_additional_ios_build_settings(target)" >> ios/Podfile
+          echo "    target.build_configurations.each do |config|" >> ios/Podfile
+          echo "      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '14.0'" >> ios/Podfile
+          echo "    end" >> ios/Podfile
+          echo "  end" >> ios/Podfile
+          echo "end" >> ios/Podfile
+          cat ios/Podfile
+
+      # ── 7. Patch Info.plist ───────────────────────────────────────────────
+      - name: Patch Info.plist
+        run: |
+          PLIST="ios/Runner/Info.plist"
+          # Allow arbitrary loads (needed for github.com WebView)
+          /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity dict" "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Set :NSAppTransportSecurity:NSAllowsArbitraryLoads true" "$PLIST" 2>/dev/null || \
+          /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSAllowsArbitraryLoads bool true" "$PLIST"
+          # Background modes: fetch + remote-notification (keep connection alive)
+          /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes array" "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes:0 string fetch" "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes:1 string remote-notification" "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes:2 string processing" "$PLIST" 2>/dev/null || true
+          # Display name
+          /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName 'Codespace'" "$PLIST" 2>/dev/null || \
+          /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string 'Codespace'" "$PLIST"
+          cat "$PLIST"
+
+      # ── 8. Set deployment target in xcodeproj ────────────────────────────
+      - name: Set iOS deployment target 14.0
+        run: |
+          cd ios
+          # Update project.pbxproj
+          sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = [0-9.]*/IPHONEOS_DEPLOYMENT_TARGET = 14.0/g' \
+            Runner.xcodeproj/project.pbxproj
+          grep "IPHONEOS_DEPLOYMENT_TARGET" Runner.xcodeproj/project.pbxproj | head -5
+
+      # ── 9. CocoaPods ─────────────────────────────────────────────────────
+      - name: Pod install
+        run: |
+          cd ios
+          pod install --repo-update
+
+      # ── 10. Analyze ───────────────────────────────────────────────────────
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos
+        continue-on-error: true
+
+      # ── 11. Build unsigned iOS release ────────────────────────────────────
+      - name: Build iOS (no codesign)
+        run: |
+          flutter build ios \
+            --release \
+            --no-codesign \
+            --dart-define=FLUTTER_TARGET=lib/main.dart
+
+      # ── 12. Package as IPA (TrollStore format) ────────────────────────────
+      # TrollStore installs unsigned IPAs directly — no certificate needed.
+      - name: Package IPA
+        run: |
+          mkdir -p /tmp/Payload
+          cp -r build/ios/iphoneos/Runner.app /tmp/Payload/Runner.app
+          cd /tmp
+          zip -r codespace-mobile-ios.ipa Payload/
+          ls -lh codespace-mobile-ios.ipa
+
+      # ── 13. Upload artifact ───────────────────────────────────────────────
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: codespace-mobile-ios-trollstore
+          path: /tmp/codespace-mobile-ios.ipa
+          retention-days: 30
+
+      - name: Build info
+        run: |
+          echo "=== iOS IPA Built Successfully ==="
+          echo "Minimum iOS: 14.0 (compatible with iOS 15.8.5)"
+          echo "Installation: TrollStore → + → sideload IPA"
+          ls -lh /tmp/codespace-mobile-ios.ipa
