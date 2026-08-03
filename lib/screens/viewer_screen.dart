@@ -13,20 +13,13 @@ Future<void> _stopBgService() async {
 }
 
 // ─── CSS ─────────────────────────────────────────────────────────────────────
-// NOTE: All !important rules are intentional — VS Code web injects its own
-// inline styles and we must override them unconditionally.
-// IMPORTANT: These rules must ONLY be applied after the monaco-workbench is
-// fully ready. Injecting during "Setting up your workspace" breaks VS Code's
-// layout initialisation and causes the page to hang indefinitely.
+// Rules are injected ONLY after .monaco-workbench is present (workbench-ready
+// gate in the JS patch below). Never touches :root variables so VS Code's
+// own layout initialisation is never disturbed.
 const _vscodeCss = r"""
-/* ══ Codespace Mobile v1.4 ═════════════════════════════════════════════════ */
+/* ══ Codespace Mobile v2.0 ══════════════════════════════════════════════════ */
 
-/* NOTE: No :root CSS-variable overrides here — VS Code reads those variables
-   during workbench boot and zeroing them during setup causes a layout deadlock
-   that leaves the page stuck on "Setting up your workspace". */
-
-/* ── Activity bar: hide once workbench is ready ─────────────────────────── */
-/* Scoped to .monaco-workbench so rules are inert before the workbench mounts */
+/* ── Activity bar: useless on mobile, reclaim the space ─────────────────── */
 .monaco-workbench .part.activitybar,
 .monaco-workbench .activitybar.part,
 .monaco-workbench > .part.activitybar,
@@ -46,79 +39,41 @@ const _vscodeCss = r"""
   left: -9999px !important;
 }
 
-/* ── Secondary sidebar (Copilot chat panel) toggle ──────────────────────── */
-body:not(.cm-copilot-on) .part.auxiliarybar,
-body:not(.cm-copilot-on) .auxiliary-bar,
-body:not(.cm-copilot-on) [class*="auxiliarybar"] {
-  display: none !important;
-  width: 0 !important;
-  max-width: 0 !important;
-  overflow: hidden !important;
-  flex: 0 0 0 !important;
-}
-body.cm-copilot-on .part.auxiliarybar,
-body.cm-copilot-on .auxiliary-bar {
-  display: flex !important;
-  width: 320px !important;
-  min-width: 280px !important;
-  max-width: 320px !important;
-  position: relative !important;
-  z-index: 50 !important;
-  overflow: hidden !important;
-}
-
-/* ── Left sidebar (file tree) ───────────────────────────────────────────── */
-body:not(.cm-sidebar-on) .part.sidebar,
-body:not(.cm-sidebar-on) .sidebar.part {
-  display: none !important;
-  width: 0 !important;
-  min-width: 0 !important;
-  max-width: 0 !important;
-  overflow: hidden !important;
-  flex: 0 0 0 !important;
-}
-body.cm-sidebar-on .part.sidebar {
-  display: flex !important;
-  width: 240px !important;
-  min-width: 240px !important;
-  max-width: 240px !important;
-  position: relative !important;
-  z-index: 50 !important;
-  overflow: hidden !important;
-}
-
-/* ── Editor: always fills remaining width ───────────────────────────────── */
-.part.editor,
+/* ── Editor: always fills full width after activity bar removal ──────────── */
 .monaco-workbench .part.editor,
 .editor-container,
 .editorContainer {
   flex: 1 1 auto !important;
-  width: auto !important;
+  width: 100% !important;
   min-width: 0 !important;
   left: 0 !important;
 }
 
-/* ── Workbench: force full-width horizontal flex ────────────────────────── */
-.monaco-workbench .monaco-grid-view,
-.monaco-workbench .monaco-grid-branch-node,
-.monaco-workbench .split-view-view {
-  overflow: visible !important;
-}
+/* ── Sidebar & auxiliary bar: let VS Code's own UI control them ──────────── */
+/* No forced hide — VS Code's built-in toggle handles it natively.            */
 
-/* ── VS Code top toolbar (breadcrumbs / nav bar) ─────────────────────────── */
-.editor-toolbar,
-.breadcrumbs-control,
-.title.tabs-container ~ .toolbar,
-.editor-group-container .title .title-label { font-size: 12px !important; }
-
-/* ── Bigger tabs for touch ───────────────────────────────────────────────── */
+/* ── Tabs: bigger hit targets for fingers ────────────────────────────────── */
 .tabs-and-actions-container,
 .monaco-workbench .part.editor .tabs-and-actions-container {
-  height: 44px !important;
-  min-height: 44px !important;
+  height: 46px !important;
+  min-height: 46px !important;
 }
-.tabs-container .tab { height: 44px !important; padding: 0 12px !important; }
+.tabs-container .tab {
+  height: 46px !important;
+  padding: 0 14px !important;
+}
 .tab-label { font-size: 13px !important; }
+.tab-close-button { width: 28px !important; height: 28px !important; }
+
+/* ── Action bar buttons (sidebar, copilot icons in title bar) ────────────── */
+.action-item .action-label,
+.actions-container .action-item {
+  min-width: 36px !important;
+  min-height: 36px !important;
+}
+
+/* ── Breadcrumbs ─────────────────────────────────────────────────────────── */
+.breadcrumbs-control .breadcrumb-item { font-size: 12px !important; }
 
 /* ── Status bar ──────────────────────────────────────────────────────────── */
 .part.statusbar {
@@ -127,123 +82,161 @@ body.cm-sidebar-on .part.sidebar {
 }
 .statusbar-item a, .statusbar-item { font-size: 11px !important; }
 
-/* ── Terminal panel ──────────────────────────────────────────────────────── */
-.part.panel { min-height: 160px !important; }
-.xterm { font-size: 13px !important; }
-.xterm-viewport { touch-action: pan-y !important; }
+/* ── Terminal: touch-scroll + readable font ──────────────────────────────── */
+.part.panel { min-height: 180px !important; }
+.xterm { font-size: 13px !important; line-height: 1.4 !important; }
+.xterm-viewport { touch-action: pan-y !important; overflow-y: auto !important; }
 .xterm-screen canvas { touch-action: none !important; }
 
-/* ── Touch-friendly scrolling ────────────────────────────────────────────── */
+/* ── Monaco editor: smooth finger scrolling ──────────────────────────────── */
 .monaco-scrollable-element {
   -webkit-overflow-scrolling: touch !important;
 }
+.monaco-editor .overflow-guard {
+  touch-action: pan-x pan-y !important;
+}
 
-/* ── Pointer events: overlays, quick-pick, model picker ─────────────────── */
-.quick-input-widget, .monaco-quick-input-widget,
-.quick-input-list, .quick-input-list .monaco-list-row,
+/* ── Quick-pick / command palette ─────────────────────────────────────────── */
+.quick-input-widget, .monaco-quick-input-widget {
+  pointer-events: auto !important;
+  touch-action: manipulation !important;
+  z-index: 3000 !important;
+}
+.quick-input-list .monaco-list-row {
+  min-height: 44px !important;
+  line-height: 44px !important;
+  pointer-events: auto !important;
+  touch-action: manipulation !important;
+}
+
+/* ── Context menus & dropdowns ────────────────────────────────────────────── */
 .context-menu, .context-view,
-.action-item, .menubar-menu-button,
 .monaco-dropdown, .dropdown, .dropdown-menu,
-.select-container, .select-container select, .monaco-select-box,
+.select-container, .select-container select, .monaco-select-box {
+  pointer-events: auto !important;
+  touch-action: manipulation !important;
+  z-index: 3000 !important;
+}
+.context-menu .action-item,
+.context-view .action-item {
+  min-height: 36px !important;
+}
+
+/* ── Notifications / dialogs ──────────────────────────────────────────────── */
 .notification-toast, .notifications-toasts,
-.dialog-box, .dialog-shadow, .monaco-dialog-box,
-.suggest-widget, .parameter-hints-widget,
-[role="option"], [role="menuitem"], [role="listbox"] {
+.dialog-box, .dialog-shadow, .monaco-dialog-box {
+  pointer-events: auto !important;
+  touch-action: manipulation !important;
+  z-index: 3000 !important;
+}
+.monaco-dialog-box button { min-height: 36px !important; padding: 0 16px !important; }
+
+/* ── Suggest / parameter hints ────────────────────────────────────────────── */
+.suggest-widget, .parameter-hints-widget {
+  pointer-events: auto !important;
+  touch-action: manipulation !important;
+  z-index: 3000 !important;
+}
+.suggest-widget .monaco-list-row { min-height: 36px !important; }
+
+/* ── Copilot / chat ───────────────────────────────────────────────────────── */
+.chat-widget, .inline-chat-widget,
+.interactive-session, .chat-input-part,
+.chat-list-item {
+  pointer-events: auto !important;
+  touch-action: manipulation !important;
+}
+.interactive-input-box .input { min-height: 48px !important; }
+
+/* ── Generic interactive elements ────────────────────────────────────────── */
+[role="option"], [role="menuitem"], [role="listbox"],
+.menubar-menu-button, .codicon, .monaco-icon-label {
   pointer-events: auto !important;
   touch-action: manipulation !important;
   -webkit-tap-highlight-color: rgba(47,129,247,0.18) !important;
-  z-index: 2000 !important;
 }
 
-/* ── Copilot chat ────────────────────────────────────────────────────────── */
-.chat-widget, .inline-chat-widget,
-.interactive-session, .chat-input-part,
-.chat-list-item { pointer-events: auto !important; touch-action: manipulation !important; }
-
-/* ── Quick-pick items: larger hit targets ────────────────────────────────── */
-.quick-input-list .monaco-list-row {
-  min-height: 40px !important;
-  line-height: 40px !important;
+/* ── Disable text selection during touch drag (feels native) ─────────────── */
+.monaco-workbench { -webkit-user-select: none !important; user-select: none !important; }
+.monaco-editor, .xterm, .chat-widget, .interactive-session {
+  -webkit-user-select: text !important; user-select: text !important;
 }
-
-/* ── Copilot chat input: auto height ─────────────────────────────────────── */
-.interactive-input-box .input { min-height: 48px !important; }
 """;
 
 // ─── Main VS Code JS patch ───────────────────────────────────────────────────
 String _buildVscodeJs() => r"""
 (function() {
   'use strict';
-  if (window.__cmPatch14) return;
-  window.__cmPatch14 = true;
+  if (window.__cmPatch20) return;
+  window.__cmPatch20 = true;
 
   /* 1 ── CSS injection ───────────────────────────────────────────────────── */
   var CSS = `""" + _vscodeCss.replaceAll('`', r'\`') + r"""`;
 
   function injectCss() {
-    var el = document.getElementById('cm-patch-v5');
+    var el = document.getElementById('cm-patch-v6');
     if (!el) {
       el = document.createElement('style');
-      el.id = 'cm-patch-v5';
-      document.head
-        ? document.head.appendChild(el)
-        : document.documentElement.appendChild(el);
+      el.id = 'cm-patch-v6';
+      (document.head || document.documentElement).appendChild(el);
     }
     el.textContent = CSS;
   }
 
   /* ── Workbench-ready gate ───────────────────────────────────────────────
-     NEVER inject CSS before .monaco-workbench exists. Injecting during the
-     "Setting up your workspace" phase overrides VS Code's CSS variables and
-     causes the workbench layout engine to deadlock, leaving the page stuck.
+     CSS and observer ONLY activate after .monaco-workbench is in the DOM.
+     Injecting before that corrupts VS Code's layout boot and leaves the
+     page stuck on "Setting up your workspace".
   ── */
-  function isWorkbenchReady() {
+  function workbenchReady() {
     return !!document.querySelector('.monaco-workbench');
   }
 
-  /* Debounced re-inject: coalesces rapid mutation bursts into one call */
-  var _debTimer = null;
+  /* Debounce: coalesce rapid mutation bursts into one injection */
+  var _dbt = null;
   function debouncedInject() {
-    if (!isWorkbenchReady()) return;
-    clearTimeout(_debTimer);
-    _debTimer = setTimeout(function() {
+    if (!workbenchReady()) return;
+    clearTimeout(_dbt);
+    _dbt = setTimeout(function() {
       injectCss();
-      /* Force-remove activity bar inline style if VS Code re-adds width */
-      document.querySelectorAll('.monaco-workbench .part.activitybar, .monaco-workbench .activitybar.part').forEach(function(node) {
-        node.style.setProperty('display', 'none', 'important');
-        node.style.setProperty('width', '0', 'important');
-        node.style.setProperty('max-width', '0', 'important');
+      /* Strip any inline width VS Code re-adds to the activity bar */
+      document.querySelectorAll(
+        '.monaco-workbench .part.activitybar, .monaco-workbench .activitybar.part'
+      ).forEach(function(n) {
+        n.style.setProperty('display',    'none',  'important');
+        n.style.setProperty('width',      '0',     'important');
+        n.style.setProperty('max-width',  '0',     'important');
       });
     }, 150);
   }
 
-  /* Poll for workbench ready, then inject once and start the observer */
-  var _readyPoll = setInterval(function() {
-    if (!isWorkbenchReady()) return;
-    clearInterval(_readyPoll);
+  /* Poll until workbench is ready, then inject and start observer */
+  var _poll = setInterval(function() {
+    if (!workbenchReady()) return;
+    clearInterval(_poll);
     injectCss();
 
-    /* Re-inject when VS Code rebuilds the DOM — debounced to avoid cascade */
-    new MutationObserver(debouncedInject)
-      .observe(document.documentElement, {
-        childList: true, subtree: true,
-        attributes: true, attributeFilter: ['style', 'class']
-      });
+    new MutationObserver(debouncedInject).observe(document.documentElement, {
+      childList: true, subtree: true,
+      attributes: true, attributeFilter: ['style', 'class']
+    });
 
-    /* Retry for 30s after workbench ready (lazy-loaded components) */
-    var t = 0;
-    var cssIv = setInterval(function() {
-      injectCss();
-      if (++t > 30) clearInterval(cssIv);
-    }, 1000);
+    /* Retry for 30 s (VS Code lazy-loads panels) */
+    var n = 0;
+    var iv = setInterval(function() { injectCss(); if (++n >= 30) clearInterval(iv); }, 1000);
   }, 500);
 
   /* 2 ── Viewport ────────────────────────────────────────────────────────── */
-  var meta = document.querySelector('meta[name=viewport]');
-  if (!meta) { meta = document.createElement('meta'); meta.name = 'viewport'; document.head.appendChild(meta); }
-  meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes';
+  (function() {
+    var m = document.querySelector('meta[name=viewport]');
+    if (!m) { m = document.createElement('meta'); m.name = 'viewport'; (document.head || document.documentElement).appendChild(m); }
+    m.content = 'width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes';
+  })();
 
-  /* 3 ── Touch → Mouse bridge (fixes model picker, quick-pick, dropdowns) ── */
+  /* 3 ── Touch → Mouse bridge ─────────────────────────────────────────────
+     Fixes: command palette, context menus, dropdowns, quick-pick, copilot
+     chat buttons — all require real mousedown/mouseup/click events.
+  ── */
   var INTERACTIVE = [
     '.quick-input-widget', '.context-menu', '.context-view',
     '.monaco-dropdown', '.dropdown-menu', '.select-container',
@@ -251,9 +244,9 @@ String _buildVscodeJs() => r"""
     '.chat-widget', '.interactive-session .chat-input-part button',
     '.codicon', '.monaco-icon-label', '.quick-input-action',
     '[role="option"]', '[role="menuitem"]', '[role="button"]',
-    '.suggest-widget .monaco-list-row',
-    '.parameter-hints-widget', '.notification-list-item',
-    '.monaco-dialog-box button'
+    '.suggest-widget .monaco-list-row', '.parameter-hints-widget',
+    '.notification-list-item', '.monaco-dialog-box button',
+    '.tab', '.tab-close-button'
   ].join(',');
 
   function synth(type, touch, target) {
@@ -268,20 +261,20 @@ String _buildVscodeJs() => r"""
   document.addEventListener('touchstart', function(e) {
     var el = e.target;
     if (el.closest && el.closest(INTERACTIVE)) {
-      var tc = e.touches[0];
-      synth('mouseover', tc, el); synth('mouseenter', tc, el); synth('mousedown', tc, el);
+      var t = e.touches[0];
+      synth('mouseover', t, el); synth('mouseenter', t, el); synth('mousedown', t, el);
     }
   }, { passive: true });
 
   document.addEventListener('touchend', function(e) {
     var el = e.target;
     if (el.closest && el.closest(INTERACTIVE)) {
-      var tc = e.changedTouches[0];
-      synth('mouseup', tc, el); synth('click', tc, el);
+      var t = e.changedTouches[0];
+      synth('mouseup', t, el); synth('click', t, el);
     }
   }, { passive: true });
 
-  /* Patch <select> for model picker (native select sometimes used) */
+  /* Patch <select> elements (model picker uses native selects) */
   function patchSelects() {
     document.querySelectorAll('select').forEach(function(s) {
       s.style.pointerEvents = 'auto';
@@ -293,17 +286,19 @@ String _buildVscodeJs() => r"""
     document.body || document.documentElement, { childList: true, subtree: true }
   );
 
-  /* 4 ── Heartbeat every 20s: keeps WiFi radio + WebSocket alive ──────────── */
+  /* 4 ── Heartbeat: keep WiFi radio + WebSocket alive ─────────────────────── */
   function heartbeat() {
     try {
-      fetch('https://github.com/favicon.ico', { mode: 'no-cors', cache: 'no-store',
-        signal: AbortSignal.timeout(5000) }).catch(function(){});
+      fetch('https://github.com/favicon.ico', {
+        mode: 'no-cors', cache: 'no-store',
+        signal: AbortSignal.timeout(5000)
+      }).catch(function(){});
     } catch(_){}
   }
   heartbeat();
   setInterval(heartbeat, 20000);
 
-  /* 5 ── Auto-reconnect when app returns to foreground ───────────────────── */
+  /* 5 ── Auto-reconnect on foreground resume ──────────────────────────────── */
   var _wasHidden = false;
   document.addEventListener('visibilitychange', function() {
     if (document.hidden) { _wasHidden = true; return; }
@@ -311,21 +306,18 @@ String _buildVscodeJs() => r"""
     _wasHidden = false;
     heartbeat();
     setTimeout(function() {
-      /* VS Code "Reload window" button */
       var btn = document.querySelector(
         '.reload-window, [class*="reload"][class*="button"], ' +
         '[aria-label*="Reload Window"], button[data-action="reconnect"], ' +
         '[aria-label*="Reconnect"], [title*="Reload"]'
       );
       if (btn) { btn.click(); return; }
-      /* GitHub Codespaces "offline" page */
       var offline = document.querySelector('[data-testid="offline-error"] button');
       if (offline) { offline.click(); return; }
-      /* Last resort: soft reload if still on a codespace URL */
       var h = window.location.href;
       if (h.includes('.github.dev') || h.includes('vscode.dev')) window.location.reload();
     }, 1500);
-    setTimeout(function() { heartbeat(); }, 4000);
+    setTimeout(heartbeat, 4000);
   });
 
   /* 6 ── Web Locks: prevent background JS throttling ─────────────────────── */
@@ -337,10 +329,6 @@ String _buildVscodeJs() => r"""
 
 })();
 """;
-
-// ─── Sidebar toggles ─────────────────────────────────────────────────────────
-const _toggleSidebarJs  = r"(function(){document.body.classList.toggle('cm-sidebar-on');})();";
-const _toggleCopilotJs  = r"(function(){document.body.classList.toggle('cm-copilot-on');})();";
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -357,10 +345,8 @@ class _ViewerScreenState extends State<ViewerScreen>
   late WebViewController _wvc;
   bool _loading = true;
   int  _progress = 0;
-  String _title    = 'Codespaces';
-  bool _isVSCode   = false;
-  bool _sidebarOn  = false;
-  bool _copilotOn  = false;
+  String _title  = 'Codespaces';
+  bool _isVSCode = false;
 
   @override
   void initState() {
@@ -379,24 +365,22 @@ class _ViewerScreenState extends State<ViewerScreen>
       )
       ..setNavigationDelegate(NavigationDelegate(
         onPageStarted: (url) => setState(() {
-          _loading = true;
-          _sidebarOn = false;
-          _copilotOn = false;
+          _loading  = true;
           _isVSCode = _isVSCodeUrl(url);
-          _title = _titleFrom(url);
+          _title    = _titleFrom(url);
         }),
         onProgress: (p) => setState(() => _progress = p),
         onPageFinished: (url) async {
           setState(() {
-            _loading = false;
+            _loading  = false;
             _isVSCode = _isVSCodeUrl(url);
-            _title = _titleFrom(url);
+            _title    = _titleFrom(url);
           });
           if (_isVSCode) {
+            // Inject immediately, then once more after a short delay in case
+            // VS Code reinitialises its DOM on first load.
             await _inject();
-            await Future.delayed(const Duration(seconds: 2));
-            await _inject();
-            await Future.delayed(const Duration(seconds: 5));
+            await Future.delayed(const Duration(seconds: 3));
             await _inject();
             _startBgService();
           }
@@ -410,9 +394,7 @@ class _ViewerScreenState extends State<ViewerScreen>
   Future<void> _inject() => _wvc.runJavaScript(_buildVscodeJs());
 
   @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    // WakeLock + WifiLock handle background — nothing needed here
-  }
+  void didChangeAppLifecycleState(AppLifecycleState state) {}
 
   @override
   void dispose() {
@@ -436,16 +418,6 @@ class _ViewerScreenState extends State<ViewerScreen>
     if (uri.path.startsWith('/codespaces')) return 'Codespaces';
     if (uri.host == 'github.com') return 'GitHub';
     return uri.host;
-  }
-
-  Future<void> _toggleSidebar() async {
-    await _wvc.runJavaScript(_toggleSidebarJs);
-    setState(() => _sidebarOn = !_sidebarOn);
-  }
-
-  Future<void> _toggleCopilot() async {
-    await _wvc.runJavaScript(_toggleCopilotJs);
-    setState(() => _copilotOn = !_copilotOn);
   }
 
   @override
@@ -487,7 +459,6 @@ class _ViewerScreenState extends State<ViewerScreen>
       elevation: 0,
       scrolledUnderElevation: 0,
       surfaceTintColor: Colors.transparent,
-      // Back button
       leading: IconButton(
         icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
         color: AppTheme.muted,
@@ -500,14 +471,14 @@ class _ViewerScreenState extends State<ViewerScreen>
           }
         },
       ),
-      // Title with live indicator
       title: Row(children: [
         if (_isVSCode)
           Container(
             width: 7, height: 7,
             margin: const EdgeInsets.only(right: 7),
             decoration: const BoxDecoration(
-              color: AppTheme.green, shape: BoxShape.circle),
+              color: AppTheme.green, shape: BoxShape.circle,
+            ),
           ),
         Expanded(
           child: Text(
@@ -523,50 +494,25 @@ class _ViewerScreenState extends State<ViewerScreen>
           ),
         ),
       ]),
-      // Action buttons
       actions: [
-        if (_isVSCode) ...[
-          // File tree toggle
-          _barBtn(
-            _sidebarOn ? Icons.folder_open_rounded : Icons.folder_outlined,
-            _sidebarOn ? AppTheme.accent : AppTheme.muted,
-            _toggleSidebar,
-            tooltip: 'Fichiers',
-          ),
-          // Copilot toggle
-          _barBtn(
-            Icons.auto_awesome_rounded,
-            _copilotOn ? AppTheme.accent : AppTheme.muted,
-            _toggleCopilot,
-            tooltip: 'Copilot',
-          ),
-        ],
-        // Refresh
-        _barBtn(
-          Icons.refresh_rounded,
-          AppTheme.muted,
-          () { setState(() => _loading = true); _wvc.reload(); },
+        IconButton(
+          icon: const Icon(Icons.refresh_rounded, size: 20),
+          color: AppTheme.muted,
           tooltip: 'Rafraîchir',
+          onPressed: () {
+            setState(() => _loading = true);
+            _wvc.reload();
+          },
+          style: IconButton.styleFrom(
+            minimumSize: const Size(44, 44),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
         ),
-        const SizedBox(width: 2),
+        const SizedBox(width: 4),
       ],
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(1),
         child: Container(height: 1, color: AppTheme.border),
-      ),
-    );
-  }
-
-  Widget _barBtn(IconData icon, Color color, VoidCallback onTap, {String? tooltip}) {
-    return Tooltip(
-      message: tooltip ?? '',
-      child: IconButton(
-        icon: Icon(icon, size: 20, color: color),
-        onPressed: onTap,
-        style: IconButton.styleFrom(
-          minimumSize: const Size(40, 40),
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        ),
       ),
     );
   }
