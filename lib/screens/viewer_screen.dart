@@ -13,12 +13,11 @@ Future<void> _stopBgService() async {
   try { await _serviceChannel.invokeMethod('stopService'); } catch (_) {}
 }
 
-// ─── VS Code mobile CSS (class-based so toggle works) ───────────────────────
-// We add/remove class `cm-sidebar-on` to <body> to toggle sidebar visibility.
+// ─── VS Code mobile CSS ──────────────────────────────────────────────────────
 const _vscodeCss = r"""
-/* ── Codespace Mobile patch ── */
+/* ── Codespace Mobile patch v1.2 ── */
 
-/* Activity bar: always hidden on mobile */
+/* Activity bar: always hidden */
 .part.activitybar,
 .monaco-workbench .activitybar {
   display: none !important;
@@ -26,7 +25,7 @@ const _vscodeCss = r"""
   min-width: 0 !important;
 }
 
-/* Sidebar: hidden by default, shown when body has .cm-sidebar-on */
+/* Sidebar: hidden by default, shown via body.cm-sidebar-on */
 body:not(.cm-sidebar-on) .part.sidebar {
   display: none !important;
   width: 0 !important;
@@ -39,7 +38,7 @@ body.cm-sidebar-on .part.sidebar {
   z-index: 50 !important;
 }
 
-/* Editor fills screen when sidebar hidden */
+/* Editor fills screen */
 body:not(.cm-sidebar-on) .part.editor,
 body:not(.cm-sidebar-on) .monaco-workbench .part.editor {
   left: 0 !important;
@@ -62,7 +61,7 @@ body.cm-sidebar-on .part.editor {
 /* Touch-friendly scrolling */
 .monaco-scrollable-element { -webkit-overflow-scrolling: touch !important; }
 
-/* ── CRITICAL: Fix pointer events for overlays / dropdowns / quick-pick ── */
+/* Fix pointer events for overlays / dropdowns / quick-pick */
 .quick-input-widget,
 .monaco-quick-input-widget,
 .quick-input-list,
@@ -103,19 +102,21 @@ body.cm-sidebar-on .part.editor {
 .xterm-viewport { touch-action: pan-y !important; }
 """;
 
-// ─── JS: inject CSS + MutationObserver + touch bridge ───────────────────────
+// ─── JS: CSS + MutationObserver + touch bridge + heartbeat + auto-reconnect ──
 String _buildVscodeJs() => r"""
 (function() {
   'use strict';
+  if (window.__cmPatchInstalled) return;
+  window.__cmPatchInstalled = true;
 
   // ── 1. CSS injection ──────────────────────────────────────────────────────
   var CSS = `""" + _vscodeCss.replaceAll('`', r'\`') + r"""`;
 
   function injectCss() {
-    var el = document.getElementById('cm-patch-v3');
+    var el = document.getElementById('cm-patch-v4');
     if (!el) {
       el = document.createElement('style');
-      el.id = 'cm-patch-v3';
+      el.id = 'cm-patch-v4';
       (document.head || document.documentElement).appendChild(el);
     }
     el.textContent = CSS;
@@ -123,16 +124,14 @@ String _buildVscodeJs() => r"""
 
   injectCss();
 
-  // Re-inject when VS Code rebuilds its DOM
   new MutationObserver(injectCss).observe(
     document.documentElement, { childList: true, subtree: false }
   );
 
-  // Retry for 30s (VS Code loads lazily)
   var t = 0;
-  var iv = setInterval(function() {
+  var cssIv = setInterval(function() {
     injectCss();
-    if (++t > 30) clearInterval(iv);
+    if (++t > 30) clearInterval(cssIv);
   }, 1000);
 
   // ── 2. Viewport ───────────────────────────────────────────────────────────
@@ -144,18 +143,14 @@ String _buildVscodeJs() => r"""
   }
   meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes';
 
-  // ── 3. Touch → Mouse event bridge (fixes model picker + dropdowns) ────────
-  // VS Code's quick-input, context menus, and dropdowns listen for
-  // mousedown/mouseup/click. On Android WebView these don't fire reliably
-  // for dynamically-created overlay elements. We bridge them here.
+  // ── 3. Touch → Mouse event bridge ────────────────────────────────────────
   function synthesize(type, touch, target) {
     var evt = new MouseEvent(type, {
       bubbles: true, cancelable: true,
-      view: window,
-      detail: 1,
+      view: window, detail: 1,
       screenX: touch.screenX, screenY: touch.screenY,
       clientX: touch.clientX, clientY: touch.clientY,
-      button: 0, buttons: 1
+      button: 0, buttons: type === 'mousedown' ? 1 : 0
     });
     target.dispatchEvent(evt);
   }
@@ -165,49 +160,113 @@ String _buildVscodeJs() => r"""
     '.monaco-dropdown', '.dropdown-menu', '.select-container',
     '.monaco-list-row', '.action-item', '.menubar-menu-button',
     '.chat-widget', '.interactive-session .chat-input-part button',
-    '.codicon', '.monaco-icon-label'
+    '.codicon', '.monaco-icon-label', '.quick-input-action',
+    '[role="option"]', '[role="menuitem"]', '[role="button"]',
+    '.suggest-widget', '.parameter-hints-widget'
   ].join(',');
 
   document.addEventListener('touchstart', function(e) {
     var el = e.target;
     if (el.closest && el.closest(INTERACTIVE)) {
-      var t = e.touches[0];
-      synthesize('mouseover', t, el);
-      synthesize('mouseenter', t, el);
-      synthesize('mousedown', t, el);
+      var tc = e.touches[0];
+      synthesize('mouseover', tc, el);
+      synthesize('mouseenter', tc, el);
+      synthesize('mousedown', tc, el);
     }
   }, { passive: true });
 
   document.addEventListener('touchend', function(e) {
     var el = e.target;
     if (el.closest && el.closest(INTERACTIVE)) {
-      var t = e.changedTouches[0];
-      synthesize('mouseup', t, el);
-      synthesize('click',   t, el);
+      var tc = e.changedTouches[0];
+      synthesize('mouseup', tc, el);
+      synthesize('click',   tc, el);
     }
   }, { passive: true });
 
-  // ── 4. Fix <select> elements (model picker uses native select sometimes) ──
-  document.querySelectorAll('select').forEach(function(s) {
-    s.style.pointerEvents = 'auto';
-    s.style.touchAction = 'manipulation';
-  });
-  // Watch for new selects added dynamically
-  new MutationObserver(function() {
+  // Fix <select> elements (model picker)
+  function patchSelects() {
     document.querySelectorAll('select').forEach(function(s) {
       s.style.pointerEvents = 'auto';
       s.style.touchAction = 'manipulation';
     });
-  }).observe(document.body || document.documentElement, { childList: true, subtree: true });
+  }
+  patchSelects();
+  new MutationObserver(patchSelects).observe(
+    document.body || document.documentElement, { childList: true, subtree: true }
+  );
+
+  // ── 4. Heartbeat — keeps WebSocket alive every 20s ───────────────────────
+  // Strategy: fetch a tiny resource from github.com so the radio stays active.
+  // Even if it fails, it prevents the system from assuming the connection is idle.
+  function heartbeat() {
+    try {
+      fetch('https://github.com/favicon.ico', {
+        mode: 'no-cors', cache: 'no-store',
+        signal: AbortSignal.timeout(5000)
+      }).catch(function() {});
+    } catch(_) {}
+  }
+  heartbeat();
+  var heartbeatTimer = setInterval(heartbeat, 20000);
+
+  // ── 5. Auto-reconnect on visibility restore ───────────────────────────────
+  // When the user returns to the app after backgrounding, VS Code sometimes
+  // shows "offline". We detect this and auto-click the reconnect button,
+  // or reload as a last resort.
+  var _wasHidden = false;
+
+  function tryReconnect() {
+    // VS Code shows a reload button — click it automatically
+    var btn = document.querySelector(
+      '.reload-window, [class*="reload"], [aria-label*="Reload"], ' +
+      '[title*="Reload"], .messageActions .monaco-button'
+    );
+    if (btn) { btn.click(); return; }
+
+    // GitHub Codespaces "offline" error page
+    var offlineEl = document.querySelector(
+      '[data-testid="offline-error"], .offline-error, ' +
+      'button[data-action="reconnect"], [aria-label*="Reconnect"]'
+    );
+    if (offlineEl) { offlineEl.click(); return; }
+
+    // Last resort: if URL still points to a codespace, do a soft reload
+    if (window.location.href.includes('.github.dev') ||
+        window.location.href.includes('vscode.dev')) {
+      window.location.reload();
+    }
+  }
+
+  document.addEventListener('visibilitychange', function() {
+    if (document.hidden) {
+      _wasHidden = true;
+    } else if (_wasHidden) {
+      _wasHidden = false;
+      // Small delay so VS Code has time to detect reconnect state
+      setTimeout(tryReconnect, 1500);
+      setTimeout(tryReconnect, 4000);
+      heartbeat();
+    }
+  });
+
+  // ── 6. Web Locks API — prevent background throttling ─────────────────────
+  if (navigator.locks && navigator.locks.request) {
+    navigator.locks.request(
+      'cm_keepalive',
+      { mode: 'shared' },
+      function(lock) {
+        return new Promise(function() {}); // never resolves → lock held forever
+      }
+    );
+  }
 
 })();
 """;
 
 // ─── JS: toggle sidebar ──────────────────────────────────────────────────────
 const _toggleSidebarJs = r"""
-(function() {
-  document.body.classList.toggle('cm-sidebar-on');
-})();
+(function() { document.body.classList.toggle('cm-sidebar-on'); })();
 """;
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -259,10 +318,12 @@ class _ViewerScreenState extends State<ViewerScreen>
             _title = _titleFrom(url);
           });
           if (_isVSCode) {
-            // Inject early + after render
-            _wvc.runJavaScript(_buildVscodeJs());
+            // Inject immediately + after VS Code finishes lazy loading
+            await _wvc.runJavaScript(_buildVscodeJs());
             await Future.delayed(const Duration(seconds: 2));
-            _wvc.runJavaScript(_buildVscodeJs());
+            await _wvc.runJavaScript(_buildVscodeJs());
+            await Future.delayed(const Duration(seconds: 5));
+            await _wvc.runJavaScript(_buildVscodeJs());
             _startBgService();
           }
         },
@@ -272,10 +333,9 @@ class _ViewerScreenState extends State<ViewerScreen>
       ..loadRequest(Uri.parse(widget.initialUrl));
   }
 
-  // Stop service when leaving VS Code
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Keep running in background — service handles it
+    // Service + WakeLock handle background — nothing to do here
   }
 
   @override
@@ -295,7 +355,6 @@ class _ViewerScreenState extends State<ViewerScreen>
     if (uri == null) return 'GitHub';
     if (_isVSCodeUrl(url)) {
       final name = uri.host.split('.').first;
-      // Codespace names are like "owner-repo-xxxxx", shorten nicely
       final parts = name.split('-');
       return parts.length >= 2 ? '${parts[0]}/${parts[1]}' : name;
     }
