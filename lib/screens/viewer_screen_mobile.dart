@@ -12,151 +12,56 @@ Future<void> _stopBgService() async {
   try { await _serviceChannel.invokeMethod('stopService'); } catch (_) {}
 }
 
-// ─── CSS ─────────────────────────────────────────────────────────────────────
+// ─── VS Code mobile CSS ──────────────────────────────────────────────────────
+// Règle d'or : ne PAS toucher overflow/flex sur split-view-view, Monaco gère.
 const _vscodeCss = r"""
-/* ══ Codespace Mobile v3.0 — full mobile fix ════════════════════════════════ */
+/* ══ Codespace Mobile v2.2 ══════════════════════════════════════════════════ */
 
-/* ── Workbench root ──────────────────────────────────────────────────────── */
-.monaco-workbench {
-  display: flex !important;
-  flex-direction: row !important;
-  width: 100% !important;
-  overflow: hidden !important;
-  -webkit-user-select: none !important;
-  user-select: none !important;
-}
-
-/* ── Activity bar: fully removed ────────────────────────────────────────── */
-.monaco-workbench .part.activitybar,
-.monaco-workbench .activitybar.part,
-.monaco-workbench > .part.activitybar,
-.monaco-workbench div.part.activitybar,
-.monaco-workbench [class*="activitybar"][class*="part"],
-.monaco-workbench .activityBarContent,
-.monaco-workbench .activity-bar {
+/* ── Activity bar : caché ────────────────────────────────────────────────── */
+.part.activitybar,
+.monaco-workbench .activitybar {
   display: none !important;
   width: 0 !important;
   min-width: 0 !important;
-  max-width: 0 !important;
-  flex: 0 0 0px !important;
-  flex-basis: 0px !important;
-  overflow: hidden !important;
-  opacity: 0 !important;
-  pointer-events: none !important;
-  position: absolute !important;
-  left: -9999px !important;
 }
 
-/* ── Split-view containers: allow full reflow ────────────────────────────── */
-.monaco-workbench .monaco-split-view2,
-.monaco-workbench .monaco-grid-view,
-.monaco-workbench .monaco-grid-branch-node {
-  width: 100% !important;
-  overflow: hidden !important;
+/* ── Sidebar : cachée par défaut, visible via body.cm-sidebar-on ─────────── */
+body:not(.cm-sidebar-on) .part.sidebar {
+  display: none !important;
+  width: 0 !important;
+}
+body.cm-sidebar-on .part.sidebar {
+  display: flex !important;
+  width: 260px !important;
+  min-width: 260px !important;
+  position: relative !important;
+  z-index: 50 !important;
 }
 
-/* ── Split-view-view: DO NOT clip — sidebar/auxiliarybar live here ────────
-   overflow:hidden here is the #1 cause of "rogné" sidebar content.         */
-.monaco-workbench .split-view-view {
-  overflow: visible !important;
+/* ── Éditeur : plein écran quand sidebar cachée ──────────────────────────── */
+body:not(.cm-sidebar-on) .part.editor,
+body:not(.cm-sidebar-on) .monaco-workbench .part.editor {
+  left: 0 !important;
+  width: 100vw !important;
 }
-/* Inner sashes and panes can still clip their own scroll areas */
-.monaco-workbench .split-view-view > .pane,
-.monaco-workbench .split-view-view > .composite,
-.monaco-workbench .split-view-view > .part {
-  overflow: hidden !important;
-}
-
-/* ── Sidebar (left panel: Explorer, Search, etc.) ────────────────────────── */
-.monaco-workbench .part.sidebar {
-  overflow: visible !important;
-  min-width: 0 !important;
-}
-.monaco-workbench .part.sidebar .composite.title {
-  overflow: visible !important;
-  height: 35px !important;
-  line-height: 35px !important;
-}
-.monaco-workbench .part.sidebar .composite.viewlet {
-  overflow: hidden !important;
-  height: 100% !important;
-}
-.monaco-workbench .part.sidebar .pane-header {
-  min-height: 40px !important;
-  overflow: visible !important;
-}
-.monaco-workbench .part.sidebar .pane-body {
-  overflow: hidden !important;
+body.cm-sidebar-on .part.editor {
+  left: 260px !important;
+  width: calc(100vw - 260px) !important;
 }
 
-/* ── Auxiliary bar (right panel: Copilot / Agent / Chat) ─────────────────── */
-.monaco-workbench .part.auxiliarybar {
-  overflow: visible !important;
-  min-width: 0 !important;
-}
-.monaco-workbench .part.auxiliarybar .composite.title {
-  overflow: visible !important;
-  height: 35px !important;
-  line-height: 35px !important;
-}
-.monaco-workbench .part.auxiliarybar .composite.viewlet,
-.monaco-workbench .part.auxiliarybar .view-container {
-  overflow: hidden !important;
-  height: 100% !important;
-}
-.monaco-workbench .part.auxiliarybar .pane-header {
-  min-height: 40px !important;
-  overflow: visible !important;
-}
-.monaco-workbench .part.auxiliarybar .pane-body {
-  overflow: hidden !important;
-}
-/* Copilot chat model picker area — must not be clipped */
-.monaco-workbench .part.auxiliarybar .chat-input-part,
-.monaco-workbench .part.auxiliarybar .interactive-input-box {
-  overflow: visible !important;
-}
-
-/* ── Editor group ────────────────────────────────────────────────────────── */
-.monaco-workbench .part.editor {
-  flex: 1 1 auto !important;
-  min-width: 0 !important;
-}
-.editor-container,
-.editorContainer {
-  width: 100% !important;
-  min-width: 0 !important;
-}
-
-/* ── Tabs: bigger hit targets ────────────────────────────────────────────── */
-.tabs-and-actions-container,
-.monaco-workbench .part.editor .tabs-and-actions-container {
-  height: 46px !important;
-  min-height: 46px !important;
-}
-.tabs-container .tab {
-  height: 46px !important;
-  padding: 0 14px !important;
-}
+/* ── Tabs : plus grandes pour les doigts ────────────────────────────────── */
+.tabs-and-actions-container { height: 46px !important; }
+.tabs-container .tab { height: 46px !important; padding: 0 14px !important; }
 .tab-label { font-size: 13px !important; }
 .tab-close-button { width: 28px !important; height: 28px !important; }
 
-/* ── Action bar buttons ───────────────────────────────────────────────────── */
-.action-item .action-label,
-.actions-container .action-item {
-  min-width: 36px !important;
-  min-height: 36px !important;
-}
-
-/* ── Breadcrumbs ─────────────────────────────────────────────────────────── */
-.breadcrumbs-control .breadcrumb-item { font-size: 12px !important; }
-
-/* ── Status bar ──────────────────────────────────────────────────────────── */
-.part.statusbar {
-  height: 26px !important;
-  min-height: 26px !important;
-}
+/* ── Barre de statut ─────────────────────────────────────────────────────── */
+.part.statusbar { height: 28px !important; }
 .statusbar-item a, .statusbar-item { font-size: 11px !important; }
+
+/* ── Scroll tactile ──────────────────────────────────────────────────────── */
+.monaco-scrollable-element { -webkit-overflow-scrolling: touch !important; }
+.monaco-editor .overflow-guard { touch-action: pan-x pan-y !important; }
 
 /* ── Terminal ────────────────────────────────────────────────────────────── */
 .part.panel { min-height: 180px !important; }
@@ -164,68 +69,59 @@ const _vscodeCss = r"""
 .xterm-viewport { touch-action: pan-y !important; overflow-y: auto !important; }
 .xterm-screen canvas { touch-action: none !important; }
 
-/* ── Monaco editor scroll ────────────────────────────────────────────────── */
-.monaco-scrollable-element { -webkit-overflow-scrolling: touch !important; }
-.monaco-editor .overflow-guard { touch-action: pan-x pan-y !important; }
+/* ── Pointer events sur tous les éléments interactifs ───────────────────── */
+.quick-input-widget,
+.monaco-quick-input-widget,
+.quick-input-list,
+.quick-input-list .monaco-list-row,
+.context-menu,
+.context-view,
+.action-item,
+.action-label,
+.menubar-menu-button,
+.monaco-dropdown,
+.dropdown,
+.dropdown-menu,
+.select-container,
+.select-container select,
+.monaco-select-box,
+.notification-toast,
+.notifications-toasts,
+.dialog-box,
+.dialog-shadow,
+.monaco-dialog-box {
+  pointer-events: auto !important;
+  touch-action: manipulation !important;
+  -webkit-tap-highlight-color: rgba(47,129,247,0.15) !important;
+}
 
-/* ── Quick-pick / command palette ────────────────────────────────────────── */
-.quick-input-widget, .monaco-quick-input-widget {
-  pointer-events: auto !important;
-  touch-action: manipulation !important;
-  z-index: 3000 !important;
-  overflow: visible !important;
-}
-.quick-input-list .monaco-list-row {
-  min-height: 44px !important;
-  line-height: 44px !important;
+/* ── Copilot / Chat / Agent ──────────────────────────────────────────────── */
+.chat-widget,
+.inline-chat-widget,
+.interactive-session,
+.chat-input-part,
+.chat-list-item,
+.chat-editing-session {
   pointer-events: auto !important;
   touch-action: manipulation !important;
 }
+.interactive-input-box .input { min-height: 48px !important; }
+.monaco-dialog-box button { min-height: 36px !important; padding: 0 16px !important; }
 
-/* ── Context menus & dropdowns ───────────────────────────────────────────── */
-.context-menu, .context-view,
-.monaco-dropdown, .dropdown, .dropdown-menu,
-.select-container, .select-container select, .monaco-select-box {
-  pointer-events: auto !important;
-  touch-action: manipulation !important;
-  z-index: 3000 !important;
-}
-.context-menu .action-item,
-.context-view .action-item { min-height: 36px !important; }
-
-/* ── Model / AI picker (Copilot chat model selector) ─────────────────────── */
-[class*="modelPicker"], [class*="model-picker"],
-.chat-model-picker, .chat-model-picker-dropdown,
-.model-picker, .model-picker-widget,
-[aria-label*="model" i], [aria-label*="Model" i],
-[title*="model" i], [title*="Model" i],
-.chat-model-item, .chat-model-selector,
-.interactive-session [class*="model"],
-.chat-widget [class*="model"] {
-  pointer-events: auto !important;
-  touch-action: manipulation !important;
-  z-index: 4000 !important;
-  overflow: visible !important;
-}
-/* Native <select> inside model pickers */
-select, select option {
+/* ── Model picker (sélecteur IA Copilot) ─────────────────────────────────── */
+[class*="modelPicker"],
+[class*="model-picker"],
+.chat-model-picker,
+.model-picker,
+[aria-label*="odel" i],
+select,
+select option {
   pointer-events: auto !important;
   touch-action: manipulation !important;
   -webkit-tap-highlight-color: rgba(47,129,247,0.18) !important;
-  font-size: 14px !important;
-  min-height: 36px !important;
 }
 
-/* ── Notifications / dialogs ─────────────────────────────────────────────── */
-.notification-toast, .notifications-toasts,
-.dialog-box, .dialog-shadow, .monaco-dialog-box {
-  pointer-events: auto !important;
-  touch-action: manipulation !important;
-  z-index: 3000 !important;
-}
-.monaco-dialog-box button { min-height: 36px !important; padding: 0 16px !important; }
-
-/* ── Suggest / parameter hints ───────────────────────────────────────────── */
+/* ── Suggestions / hints ─────────────────────────────────────────────────── */
 .suggest-widget, .parameter-hints-widget {
   pointer-events: auto !important;
   touch-action: manipulation !important;
@@ -233,107 +129,51 @@ select, select option {
 }
 .suggest-widget .monaco-list-row { min-height: 36px !important; }
 
-/* ── Copilot / chat / agent ──────────────────────────────────────────────── */
-.chat-widget, .inline-chat-widget,
-.interactive-session, .chat-input-part,
-.chat-list-item, .chat-editing-session {
+/* ── Rôles ARIA génériques ───────────────────────────────────────────────── */
+[role="option"], [role="menuitem"], [role="button"], [role="tab"],
+.codicon, .monaco-icon-label, .breadcrumb-item {
   pointer-events: auto !important;
   touch-action: manipulation !important;
-}
-.interactive-input-box .input { min-height: 48px !important; }
-.chat-input-part .toolbar { overflow: visible !important; }
-
-/* ── Generic interactive ─────────────────────────────────────────────────── */
-[role="option"], [role="menuitem"], [role="listbox"],
-[role="button"], [role="tab"],
-.menubar-menu-button, .codicon, .monaco-icon-label {
-  pointer-events: auto !important;
-  touch-action: manipulation !important;
-  -webkit-tap-highlight-color: rgba(47,129,247,0.18) !important;
+  -webkit-tap-highlight-color: rgba(47,129,247,0.15) !important;
 }
 
-/* ── Preserve text selection in editors ──────────────────────────────────── */
+/* ── Sélection de texte : seulement dans les zones de contenu ───────────── */
+.monaco-workbench { -webkit-user-select: none !important; user-select: none !important; }
 .monaco-editor, .xterm, .chat-widget, .interactive-session {
-  -webkit-user-select: text !important;
-  user-select: text !important;
+  -webkit-user-select: text !important; user-select: text !important;
 }
 """;
 
-// ─── Main VS Code JS patch ───────────────────────────────────────────────────
+// ─── JS patch principal ───────────────────────────────────────────────────────
 String _buildVscodeJs() => r"""
 (function() {
   'use strict';
-  if (window.__cmPatch30) return;
-  window.__cmPatch30 = true;
+  if (window.__cmPatch22) return;
+  window.__cmPatch22 = true;
 
-  /* 1 ── CSS injection ───────────────────────────────────────────────────── */
+  /* 1 ── Injection CSS ──────────────────────────────────────────────────── */
   var CSS = `""" + _vscodeCss.replaceAll('`', r'\`') + r"""`;
 
   function injectCss() {
-    var el = document.getElementById('cm-patch-v10');
+    var el = document.getElementById('cm-patch-v8');
     if (!el) {
       el = document.createElement('style');
-      el.id = 'cm-patch-v10';
+      el.id = 'cm-patch-v8';
       (document.head || document.documentElement).appendChild(el);
     }
     el.textContent = CSS;
   }
 
-  function workbenchReady() {
-    return !!document.querySelector('.monaco-workbench');
-  }
+  injectCss();
 
-  /* Zero activity-bar CSS variables + force reflow */
-  function fixLayout() {
-    var root = document.documentElement;
-    [
-      '--activity-bar-width', '--activitybar-width',
-      '--activity-bar-compact-width', '--activitybar-compact-width',
-      '--activity-bar-part-size', '--activityBarPartSize'
-    ].forEach(function(v) { root.style.setProperty(v, '0px'); });
+  /* Observer peu profond pour réinjecter si <head> est rechargé */
+  new MutationObserver(injectCss).observe(
+    document.documentElement, { childList: true, subtree: false }
+  );
 
-    window.dispatchEvent(new Event('resize'));
-
-    document.querySelectorAll(
-      '.monaco-workbench .part.activitybar, .monaco-workbench .activitybar.part'
-    ).forEach(function(n) {
-      n.style.setProperty('display',    'none',  'important');
-      n.style.setProperty('width',      '0',     'important');
-      n.style.setProperty('max-width',  '0',     'important');
-      n.style.setProperty('flex',       '0 0 0', 'important');
-      n.style.setProperty('flex-basis', '0',     'important');
-    });
-  }
-
-  /* Debounce mutation bursts */
-  var _dbt = null;
-  function debouncedApply() {
-    if (!workbenchReady()) return;
-    clearTimeout(_dbt);
-    _dbt = setTimeout(function() { injectCss(); fixLayout(); }, 150);
-  }
-
-  /* Poll until workbench ready */
-  var _poll = setInterval(function() {
-    if (!workbenchReady()) return;
-    clearInterval(_poll);
-
-    injectCss();
-    fixLayout();
-
-    [500, 1500, 3000, 6000, 10000].forEach(function(ms) {
-      setTimeout(function() { injectCss(); fixLayout(); }, ms);
-    });
-
-    new MutationObserver(debouncedApply).observe(document.documentElement, {
-      childList: true, subtree: true,
-      attributes: true, attributeFilter: ['style', 'class']
-    });
-
-    /* Re-inject CSS for 90s (lazy-loaded panels / agent mode) */
-    var n = 0;
-    var iv = setInterval(function() { injectCss(); if (++n >= 90) clearInterval(iv); }, 1000);
-  }, 500);
+  /* Réinjection pendant 60s pour les panneaux chargés en lazy */
+  var _n = 0;
+  var _iv = setInterval(function() { injectCss(); if (++_n >= 60) clearInterval(_iv); }, 1000);
 
   /* 2 ── Viewport ────────────────────────────────────────────────────────── */
   (function() {
@@ -344,103 +184,70 @@ String _buildVscodeJs() => r"""
   })();
 
   /* 3 ── Touch → Mouse bridge ─────────────────────────────────────────────
-     Converts touch events to full mouse event sequences so VS Code
-     hover-dependent UI (layout buttons, model picker, dropdowns) works.
+     passive:true intentionnel — ne pas appeler preventDefault() ici,
+     sinon on bloque les handlers touch natifs de VS Code (scroll, drag…).
+     Le bridge envoie les events souris EN PLUS des events touch natifs.
   ── */
-  var INTERACTIVE = [
-    /* Title / layout buttons */
-    '.action-item', '.action-label',
-    '.title-actions .action-item', '.editor-actions .action-item',
-    '.global-actions .action-item', '[class*="titlebar"] .action-item',
-    /* Toolbar / menu bar */
-    '.menubar-menu-button', '.toolbar-toggle-more',
-    /* Tabs */
-    '.tab', '.tab-close-button', '.tabs-and-actions-container .action-item',
-    /* Tree / list rows */
-    '.monaco-list-row', '.monaco-tree-row',
-    /* Overlays */
-    '.quick-input-widget', '.context-menu', '.context-view',
-    '.monaco-dropdown', '.dropdown-menu',
-    '.select-container', '.monaco-select-box',
-    '.quick-input-action',
-    /* Model / AI pickers — Copilot chat model selector */
-    '[class*="modelPicker"]', '[class*="model-picker"]',
-    '.chat-model-picker', '.chat-model-picker-dropdown',
-    '.model-picker', '.model-picker-widget',
-    '.chat-model-item', '.chat-model-selector',
-    '[aria-label*="model" i]', '[aria-label*="Model" i]',
-    /* Chat / Copilot */
-    '.chat-widget', '.interactive-session .chat-input-part button',
-    '.chat-execute-toolbar .action-item',
-    '.chat-input-part .toolbar .action-item',
-    /* Suggest / hints */
-    '.suggest-widget .monaco-list-row', '.parameter-hints-widget',
-    /* Notifications / dialogs */
-    '.notification-list-item', '.monaco-dialog-box button',
-    /* ARIA roles */
-    '[role="option"]', '[role="menuitem"]', '[role="button"]', '[role="tab"]',
-    /* Icons & labels */
-    '.codicon', '.monaco-icon-label',
-    /* Breadcrumbs */
-    '.breadcrumb-item',
-    /* Inline chat / agent */
-    '.inline-chat-widget .action-item',
-    '.chat-editing-session .action-item'
-  ].join(',');
-
   function synth(type, touch, target) {
     target.dispatchEvent(new MouseEvent(type, {
       bubbles: true, cancelable: true, view: window, detail: 1,
       screenX: touch.screenX, screenY: touch.screenY,
       clientX: touch.clientX, clientY: touch.clientY,
-      button: 0, buttons: (type === 'mousedown' || type === 'mousemove') ? 1 : 0
+      button: 0, buttons: type === 'mousedown' ? 1 : 0
     }));
   }
 
-  /* Find the deepest matching element from a point */
-  function hitTest(x, y) {
-    var els = document.elementsFromPoint(x, y);
-    for (var i = 0; i < els.length; i++) {
-      if (els[i].closest && els[i].closest(INTERACTIVE)) {
-        return els[i].closest(INTERACTIVE);
-      }
-    }
-    return null;
-  }
+  var INTERACTIVE = [
+    /* Overlays */
+    '.quick-input-widget', '.context-menu', '.context-view',
+    '.monaco-dropdown', '.dropdown-menu', '.select-container',
+    /* Listes */
+    '.monaco-list-row', '.monaco-tree-row',
+    /* Boutons / actions */
+    '.action-item', '.action-label', '.menubar-menu-button',
+    '.toolbar-toggle-more', '.quick-input-action',
+    /* Tabs */
+    '.tab', '.tab-close-button', '.tabs-and-actions-container .action-item',
+    /* Chat / Copilot / Agent */
+    '.chat-widget', '.interactive-session .chat-input-part button',
+    '.chat-execute-toolbar .action-item',
+    '.inline-chat-widget .action-item',
+    '.chat-editing-session .action-item',
+    /* Model picker */
+    '[class*="modelPicker"]', '[class*="model-picker"]',
+    '.chat-model-picker', '.model-picker',
+    /* Suggestions */
+    '.suggest-widget .monaco-list-row', '.parameter-hints-widget',
+    /* Notifications / dialogs */
+    '.notification-list-item', '.monaco-dialog-box button',
+    /* Rôles ARIA */
+    '[role="option"]', '[role="menuitem"]', '[role="button"]', '[role="tab"]',
+    /* Icônes */
+    '.codicon', '.monaco-icon-label', '.breadcrumb-item'
+  ].join(',');
 
   document.addEventListener('touchstart', function(e) {
-    var t = e.touches[0];
-    var hit = hitTest(t.clientX, t.clientY);
+    var el = e.target;
+    var hit = el.closest && el.closest(INTERACTIVE);
     if (!hit) return;
-    /* Prevent ghost click & double-activation */
-    e.preventDefault();
+    var t = e.touches[0];
     synth('mouseover',  t, hit);
     synth('mouseenter', t, hit);
-    synth('mousemove',  t, hit);
     synth('mousedown',  t, hit);
-  }, { passive: false, capture: false });
+  }, { passive: true });
 
   document.addEventListener('touchend', function(e) {
-    var t = e.changedTouches[0];
-    var hit = hitTest(t.clientX, t.clientY);
+    var el = e.target;
+    var hit = el.closest && el.closest(INTERACTIVE);
     if (!hit) return;
-    e.preventDefault();
+    var t = e.changedTouches[0];
     synth('mouseup',    t, hit);
     synth('click',      t, hit);
     synth('mouseleave', t, hit);
-  }, { passive: false, capture: false });
+  }, { passive: true });
 
-  document.addEventListener('touchmove', function(e) {
-    var el = e.target;
-    if (el.closest && el.closest('.quick-input-widget, .context-menu, .monaco-dialog-box')) {
-      e.preventDefault();
-    }
-  }, { passive: false });
-
-  /* 4 ── Native <select> patch (model picker dropdown) ────────────────────
-     VS Code sometimes uses a native <select> for model selection.
-     On Android WebView, the native select works but needs pointer-events.
-     Also fire 'change' and 'input' so VS Code's listener updates the model.
+  /* 4 ── Patch <select> natif (model picker) ──────────────────────────────
+     Fire aussi 'input' pour que VS Code détecte le changement de modèle.
   ── */
   function patchSelects() {
     document.querySelectorAll('select').forEach(function(s) {
@@ -448,8 +255,6 @@ String _buildVscodeJs() => r"""
       s.__cmPatched = true;
       s.style.pointerEvents = 'auto';
       s.style.touchAction = 'manipulation';
-      s.style.fontSize = '14px';
-      s.style.minHeight = '36px';
       s.addEventListener('change', function() {
         s.dispatchEvent(new Event('input', { bubbles: true }));
       });
@@ -460,7 +265,7 @@ String _buildVscodeJs() => r"""
     document.documentElement, { childList: true, subtree: true }
   );
 
-  /* 5 ── Heartbeat: keep WiFi radio + WebSocket alive ─────────────────────── */
+  /* 5 ── Heartbeat : garde le WebSocket + radio WiFi actifs ───────────────── */
   function heartbeat() {
     try {
       fetch('https://github.com/favicon.ico', {
@@ -472,7 +277,7 @@ String _buildVscodeJs() => r"""
   heartbeat();
   setInterval(heartbeat, 20000);
 
-  /* 6 ── Auto-reconnect on foreground resume ──────────────────────────────── */
+  /* 6 ── Auto-reconnect au retour foreground ──────────────────────────────── */
   var _wasHidden = false;
   document.addEventListener('visibilitychange', function() {
     if (document.hidden) { _wasHidden = true; return; }
@@ -494,7 +299,7 @@ String _buildVscodeJs() => r"""
     setTimeout(heartbeat, 4000);
   });
 
-  /* 7 ── Web Locks: prevent background JS throttling ─────────────────────── */
+  /* 7 ── Web Locks : empêche le throttling JS en arrière-plan ─────────────── */
   if (navigator.locks && navigator.locks.request) {
     navigator.locks.request('cm_keepalive', { mode: 'shared' }, function() {
       return new Promise(function() {});
@@ -502,6 +307,11 @@ String _buildVscodeJs() => r"""
   }
 
 })();
+""";
+
+// ─── Toggle sidebar (classe cm-sidebar-on sur body) ──────────────────────────
+const _toggleSidebarJs = r"""
+(function() { document.body.classList.toggle('cm-sidebar-on'); })();
 """;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -517,10 +327,11 @@ class ViewerScreen extends StatefulWidget {
 class _ViewerScreenState extends State<ViewerScreen>
     with WidgetsBindingObserver {
   late WebViewController _wvc;
-  bool _loading = true;
+  bool _loading  = true;
   int  _progress = 0;
   String _title  = 'Codespaces';
   bool _isVSCode = false;
+  bool _sidebarOn = false;
 
   @override
   void initState() {
@@ -539,9 +350,10 @@ class _ViewerScreenState extends State<ViewerScreen>
       )
       ..setNavigationDelegate(NavigationDelegate(
         onPageStarted: (url) => setState(() {
-          _loading  = true;
-          _isVSCode = _isVSCodeUrl(url);
-          _title    = _titleFrom(url);
+          _loading   = true;
+          _sidebarOn = false;
+          _isVSCode  = _isVSCodeUrl(url);
+          _title     = _titleFrom(url);
         }),
         onProgress: (p) => setState(() => _progress = p),
         onPageFinished: (url) async {
@@ -551,11 +363,12 @@ class _ViewerScreenState extends State<ViewerScreen>
             _title    = _titleFrom(url);
           });
           if (_isVSCode) {
-            await _inject();
-            await Future.delayed(const Duration(seconds: 3));
-            await _inject();
+            // Injection immédiate + 2 s + 5 s (pour panneaux lazy-loadés)
+            await _wvc.runJavaScript(_buildVscodeJs());
+            await Future.delayed(const Duration(seconds: 2));
+            await _wvc.runJavaScript(_buildVscodeJs());
             await Future.delayed(const Duration(seconds: 5));
-            await _inject();
+            await _wvc.runJavaScript(_buildVscodeJs());
             _startBgService();
           }
         },
@@ -564,8 +377,6 @@ class _ViewerScreenState extends State<ViewerScreen>
       ))
       ..loadRequest(Uri.parse(widget.initialUrl));
   }
-
-  Future<void> _inject() => _wvc.runJavaScript(_buildVscodeJs());
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {}
@@ -594,6 +405,11 @@ class _ViewerScreenState extends State<ViewerScreen>
     return uri.host;
   }
 
+  Future<void> _toggleSidebar() async {
+    await _wvc.runJavaScript(_toggleSidebarJs);
+    setState(() => _sidebarOn = !_sidebarOn);
+  }
+
   @override
   Widget build(BuildContext context) {
     return PopScope(
@@ -619,7 +435,7 @@ class _ViewerScreenState extends State<ViewerScreen>
                 value: _progress > 0 ? _progress / 100 : null,
                 backgroundColor: Colors.transparent,
                 valueColor: const AlwaysStoppedAnimation(AppTheme.accent),
-                minHeight: 2,
+                minHeight: 3,
               ),
             ),
         ]),
@@ -634,7 +450,7 @@ class _ViewerScreenState extends State<ViewerScreen>
       scrolledUnderElevation: 0,
       surfaceTintColor: Colors.transparent,
       leading: IconButton(
-        icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
+        icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
         color: AppTheme.muted,
         onPressed: () async {
           if (await _wvc.canGoBack()) {
@@ -646,19 +462,19 @@ class _ViewerScreenState extends State<ViewerScreen>
         },
       ),
       title: Row(children: [
-        if (_isVSCode)
+        if (_isVSCode) ...[
           Container(
-            width: 7, height: 7,
-            margin: const EdgeInsets.only(right: 7),
+            width: 8, height: 8,
+            margin: const EdgeInsets.only(right: 8),
             decoration: const BoxDecoration(
-              color: AppTheme.green, shape: BoxShape.circle,
-            ),
+              color: AppTheme.green, shape: BoxShape.circle),
           ),
+        ],
         Expanded(
           child: Text(
             _title,
             style: TextStyle(
-              fontSize: 14,
+              fontSize: 15,
               fontWeight: FontWeight.w600,
               color: _isVSCode ? AppTheme.text : AppTheme.textSub,
               letterSpacing: -0.2,
@@ -669,24 +485,37 @@ class _ViewerScreenState extends State<ViewerScreen>
         ),
       ]),
       actions: [
-        IconButton(
-          icon: const Icon(Icons.refresh_rounded, size: 20),
-          color: AppTheme.muted,
-          tooltip: 'Rafraîchir',
-          onPressed: () {
+        if (_isVSCode) ...[
+          _barBtn(
+            _sidebarOn ? Icons.view_sidebar : Icons.view_sidebar_outlined,
+            _sidebarOn ? AppTheme.accent : AppTheme.muted,
+            _toggleSidebar,
+          ),
+        ],
+        _barBtn(
+          Icons.refresh_rounded,
+          AppTheme.muted,
+          () {
             setState(() => _loading = true);
             _wvc.reload();
           },
-          style: IconButton.styleFrom(
-            minimumSize: const Size(44, 44),
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          ),
         ),
         const SizedBox(width: 4),
       ],
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(1),
         child: Container(height: 1, color: AppTheme.border),
+      ),
+    );
+  }
+
+  Widget _barBtn(IconData icon, Color color, VoidCallback onTap) {
+    return IconButton(
+      icon: Icon(icon, size: 21, color: color),
+      onPressed: onTap,
+      style: IconButton.styleFrom(
+        minimumSize: const Size(44, 44),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
       ),
     );
   }
