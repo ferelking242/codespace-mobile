@@ -49,15 +49,25 @@ const _vscodeCss = r"""
   left: -9999px !important;
 }
 
-/* ── Monaco split-view: let the grid reflow after activity-bar removal ───── */
+/* ── Monaco split-view: let grid reflow, do NOT clip split-view children ─── */
+/* overflow:hidden on .split-view-view clips the auxiliary bar title at top  */
 .monaco-workbench .monaco-split-view2,
 .monaco-workbench .monaco-grid-view,
 .monaco-workbench .monaco-grid-branch-node {
   width: 100% !important;
-  overflow: hidden !important;
 }
-.monaco-workbench .split-view-view {
-  overflow: hidden !important;
+
+/* ── Auxiliary bar (right panel: Copilot etc.) ───────────────────────────── */
+/* No forced hide/show — VS Code controls it natively via its own buttons.   */
+/* Ensure its composite title (panel header) is never clipped.              */
+.monaco-workbench .part.auxiliarybar {
+  overflow: visible !important;
+  min-width: 0 !important;
+}
+.monaco-workbench .part.auxiliarybar .composite.title,
+.monaco-workbench .part.auxiliarybar .pane-header,
+.monaco-workbench .part.auxiliarybar .pane-body {
+  overflow: hidden !important; /* clip inner content, not the header itself */
 }
 
 /* ── Editor group: expand into freed space ───────────────────────────────── */
@@ -281,19 +291,43 @@ String _buildVscodeJs() => r"""
   })();
 
   /* 3 ── Touch → Mouse bridge ─────────────────────────────────────────────
-     Required for: command palette, context menus, dropdowns, quick-pick,
-     copilot chat, tabs, dialog buttons — anything that needs real mouse events.
+     Required for: layout toggle buttons, command palette, context menus,
+     dropdowns, quick-pick, copilot chat, tabs, dialog buttons.
+
+     MUST use passive:false + preventDefault() on interactive elements:
+     - Stops the 300ms ghost-click the browser fires after touchend
+     - Prevents double-activation (our synthetic click + browser click)
+     - Without this, VS Code layout buttons silently toggle twice = no-op
   ── */
   var INTERACTIVE = [
+    /* VS Code title / layout buttons */
+    '.action-item', '.action-label', '.title-actions .action-item',
+    '.editor-actions .action-item', '.global-actions .action-item',
+    '[class*="titlebar"] .action-item',
+    /* Toolbar / menu bar */
+    '.menubar-menu-button', '.toolbar-toggle-more',
+    /* Tabs */
+    '.tab', '.tab-close-button', '.tabs-and-actions-container .action-item',
+    /* Tree / list rows */
+    '.monaco-list-row', '.monaco-tree-row',
+    /* Overlays */
     '.quick-input-widget', '.context-menu', '.context-view',
-    '.monaco-dropdown', '.dropdown-menu', '.select-container',
-    '.monaco-list-row', '.action-item', '.menubar-menu-button',
+    '.monaco-dropdown', '.dropdown-menu',
+    '.select-container', '.monaco-select-box',
+    '.quick-input-action',
+    /* Chat / Copilot */
     '.chat-widget', '.interactive-session .chat-input-part button',
-    '.codicon', '.monaco-icon-label', '.quick-input-action',
-    '[role="option"]', '[role="menuitem"]', '[role="button"]',
+    '.chat-execute-toolbar .action-item',
+    /* Suggest / hints */
     '.suggest-widget .monaco-list-row', '.parameter-hints-widget',
+    /* Notifications / dialogs */
     '.notification-list-item', '.monaco-dialog-box button',
-    '.tab', '.tab-close-button', '.breadcrumb-item'
+    /* Generic ARIA roles */
+    '[role="option"]', '[role="menuitem"]', '[role="button"]', '[role="tab"]',
+    /* Icons & labels */
+    '.codicon', '.monaco-icon-label',
+    /* Breadcrumbs */
+    '.breadcrumb-item'
   ].join(',');
 
   function synth(type, touch, target) {
@@ -307,19 +341,33 @@ String _buildVscodeJs() => r"""
 
   document.addEventListener('touchstart', function(e) {
     var el = e.target;
-    if (el.closest && el.closest(INTERACTIVE)) {
-      var t = e.touches[0];
-      synth('mouseover', t, el); synth('mouseenter', t, el); synth('mousedown', t, el);
-    }
-  }, { passive: true });
+    var hit = el.closest && el.closest(INTERACTIVE);
+    if (!hit) return;
+    e.preventDefault(); /* block ghost click & double-activation */
+    var t = e.touches[0];
+    synth('mouseover',  t, hit);
+    synth('mouseenter', t, hit);
+    synth('mousedown',  t, hit);
+  }, { passive: false, capture: false });
 
   document.addEventListener('touchend', function(e) {
     var el = e.target;
-    if (el.closest && el.closest(INTERACTIVE)) {
-      var t = e.changedTouches[0];
-      synth('mouseup', t, el); synth('click', t, el);
+    var hit = el.closest && el.closest(INTERACTIVE);
+    if (!hit) return;
+    e.preventDefault(); /* prevent browser synthetic click */
+    var t = e.changedTouches[0];
+    synth('mouseup',   t, hit);
+    synth('click',     t, hit);
+    synth('mouseleave',t, hit);
+  }, { passive: false, capture: false });
+
+  document.addEventListener('touchmove', function(e) {
+    /* Allow scroll everywhere except explicitly interactive widgets */
+    var el = e.target;
+    if (el.closest && el.closest('.quick-input-widget, .context-menu, .monaco-dialog-box')) {
+      e.preventDefault();
     }
-  }, { passive: true });
+  }, { passive: false });
 
   /* Patch native <select> (model picker) */
   function patchSelects() {
