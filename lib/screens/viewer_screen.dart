@@ -13,13 +13,22 @@ Future<void> _stopBgService() async {
 }
 
 // ─── CSS ─────────────────────────────────────────────────────────────────────
-// Rules are injected ONLY after .monaco-workbench is present (workbench-ready
-// gate in the JS patch below). Never touches :root variables so VS Code's
-// own layout initialisation is never disturbed.
+// Applied ONLY after .monaco-workbench is in the DOM (workbench-ready gate in
+// the JS patch). :root variables are NOT touched here — they're zeroed via JS
+// after workbench boot to avoid the "Setting up your workspace" hang.
 const _vscodeCss = r"""
-/* ══ Codespace Mobile v2.0 ══════════════════════════════════════════════════ */
+/* ══ Codespace Mobile v2.1 ══════════════════════════════════════════════════ */
 
-/* ── Activity bar: useless on mobile, reclaim the space ─────────────────── */
+/* ── Workbench root: full-width flex row ─────────────────────────────────── */
+.monaco-workbench {
+  display: flex !important;
+  flex-direction: row !important;
+  width: 100% !important;
+  overflow: hidden !important;
+}
+
+/* ── Activity bar: hidden + flex-basis zeroed so no space is reserved ──────
+   Using flex: 0 0 0 + position absolute removes it from the flex flow.     */
 .monaco-workbench .part.activitybar,
 .monaco-workbench .activitybar.part,
 .monaco-workbench > .part.activitybar,
@@ -31,26 +40,39 @@ const _vscodeCss = r"""
   width: 0 !important;
   min-width: 0 !important;
   max-width: 0 !important;
+  flex: 0 0 0px !important;
+  flex-basis: 0px !important;
   overflow: hidden !important;
   opacity: 0 !important;
   pointer-events: none !important;
-  flex: 0 0 0 !important;
   position: absolute !important;
   left: -9999px !important;
 }
 
-/* ── Editor: always fills full width after activity bar removal ──────────── */
-.monaco-workbench .part.editor,
-.editor-container,
-.editorContainer {
-  flex: 1 1 auto !important;
+/* ── Monaco split-view: let the grid reflow after activity-bar removal ───── */
+.monaco-workbench .monaco-split-view2,
+.monaco-workbench .monaco-grid-view,
+.monaco-workbench .monaco-grid-branch-node {
   width: 100% !important;
-  min-width: 0 !important;
-  left: 0 !important;
+  overflow: hidden !important;
+}
+.monaco-workbench .split-view-view {
+  overflow: hidden !important;
 }
 
-/* ── Sidebar & auxiliary bar: let VS Code's own UI control them ──────────── */
-/* No forced hide — VS Code's built-in toggle handles it natively.            */
+/* ── Editor group: expand into freed space ───────────────────────────────── */
+.monaco-workbench .part.editor {
+  flex: 1 1 auto !important;
+  /* NO explicit width — flex:1 handles it. width:100% fights with flex. */
+  min-width: 0 !important;
+}
+.editor-container,
+.editorContainer {
+  width: 100% !important;
+  min-width: 0 !important;
+}
+
+/* ── Sidebar: let VS Code's own UI toggle it; don't force-hide ───────────── */
 
 /* ── Tabs: bigger hit targets for fingers ────────────────────────────────── */
 .tabs-and-actions-container,
@@ -65,7 +87,7 @@ const _vscodeCss = r"""
 .tab-label { font-size: 13px !important; }
 .tab-close-button { width: 28px !important; height: 28px !important; }
 
-/* ── Action bar buttons (sidebar, copilot icons in title bar) ────────────── */
+/* ── Action bar buttons (sidebar/copilot icons in VS Code title bar) ──────── */
 .action-item .action-label,
 .actions-container .action-item {
   min-width: 36px !important;
@@ -88,7 +110,7 @@ const _vscodeCss = r"""
 .xterm-viewport { touch-action: pan-y !important; overflow-y: auto !important; }
 .xterm-screen canvas { touch-action: none !important; }
 
-/* ── Monaco editor: smooth finger scrolling ──────────────────────────────── */
+/* ── Monaco editor: smooth finger scroll ────────────────────────────────── */
 .monaco-scrollable-element {
   -webkit-overflow-scrolling: touch !important;
 }
@@ -118,9 +140,7 @@ const _vscodeCss = r"""
   z-index: 3000 !important;
 }
 .context-menu .action-item,
-.context-view .action-item {
-  min-height: 36px !important;
-}
+.context-view .action-item { min-height: 36px !important; }
 
 /* ── Notifications / dialogs ──────────────────────────────────────────────── */
 .notification-toast, .notifications-toasts,
@@ -156,7 +176,7 @@ const _vscodeCss = r"""
   -webkit-tap-highlight-color: rgba(47,129,247,0.18) !important;
 }
 
-/* ── Disable text selection during touch drag (feels native) ─────────────── */
+/* ── Disable accidental selection on chrome; keep it in content ──────────── */
 .monaco-workbench { -webkit-user-select: none !important; user-select: none !important; }
 .monaco-editor, .xterm, .chat-widget, .interactive-session {
   -webkit-user-select: text !important; user-select: text !important;
@@ -167,63 +187,90 @@ const _vscodeCss = r"""
 String _buildVscodeJs() => r"""
 (function() {
   'use strict';
-  if (window.__cmPatch20) return;
-  window.__cmPatch20 = true;
+  if (window.__cmPatch21) return;
+  window.__cmPatch21 = true;
 
   /* 1 ── CSS injection ───────────────────────────────────────────────────── */
   var CSS = `""" + _vscodeCss.replaceAll('`', r'\`') + r"""`;
 
   function injectCss() {
-    var el = document.getElementById('cm-patch-v6');
+    var el = document.getElementById('cm-patch-v7');
     if (!el) {
       el = document.createElement('style');
-      el.id = 'cm-patch-v6';
+      el.id = 'cm-patch-v7';
       (document.head || document.documentElement).appendChild(el);
     }
     el.textContent = CSS;
   }
 
   /* ── Workbench-ready gate ───────────────────────────────────────────────
-     CSS and observer ONLY activate after .monaco-workbench is in the DOM.
-     Injecting before that corrupts VS Code's layout boot and leaves the
-     page stuck on "Setting up your workspace".
+     NEVER inject before .monaco-workbench exists. Injecting during the
+     "Setting up your workspace" phase crashes VS Code's layout boot.
   ── */
   function workbenchReady() {
     return !!document.querySelector('.monaco-workbench');
   }
 
-  /* Debounce: coalesce rapid mutation bursts into one injection */
-  var _dbt = null;
-  function debouncedInject() {
-    if (!workbenchReady()) return;
-    clearTimeout(_dbt);
-    _dbt = setTimeout(function() {
-      injectCss();
-      /* Strip any inline width VS Code re-adds to the activity bar */
-      document.querySelectorAll(
-        '.monaco-workbench .part.activitybar, .monaco-workbench .activitybar.part'
-      ).forEach(function(n) {
-        n.style.setProperty('display',    'none',  'important');
-        n.style.setProperty('width',      '0',     'important');
-        n.style.setProperty('max-width',  '0',     'important');
-      });
-    }, 150);
+  /* ── Zero activity-bar CSS variables & force a layout recalculation ─────
+     VS Code's split-view allocates space via --activity-bar-width even when
+     the element is display:none. Without zeroing this, the editor stays
+     squashed into a thin strip on the right side of the screen.
+  ── */
+  function fixLayout() {
+    var root = document.documentElement;
+    /* Zero every known activity-bar size variable */
+    var vars = [
+      '--activity-bar-width', '--activitybar-width',
+      '--activity-bar-compact-width', '--activitybar-compact-width',
+      '--activity-bar-part-size', '--activityBarPartSize'
+    ];
+    vars.forEach(function(v) { root.style.setProperty(v, '0px'); });
+
+    /* Force VS Code's split-view layout engine to recalculate */
+    window.dispatchEvent(new Event('resize'));
+
+    /* Strip any lingering inline widths VS Code set on the activity bar */
+    document.querySelectorAll(
+      '.monaco-workbench .part.activitybar, .monaco-workbench .activitybar.part'
+    ).forEach(function(n) {
+      n.style.setProperty('display',    'none',  'important');
+      n.style.setProperty('width',      '0',     'important');
+      n.style.setProperty('max-width',  '0',     'important');
+      n.style.setProperty('flex',       '0 0 0', 'important');
+      n.style.setProperty('flex-basis', '0',     'important');
+    });
   }
 
-  /* Poll until workbench is ready, then inject and start observer */
+  /* Debounce: coalesce rapid mutation bursts */
+  var _dbt = null;
+  function debouncedApply() {
+    if (!workbenchReady()) return;
+    clearTimeout(_dbt);
+    _dbt = setTimeout(function() { injectCss(); fixLayout(); }, 150);
+  }
+
+  /* Poll until workbench is ready, then apply and watch */
   var _poll = setInterval(function() {
     if (!workbenchReady()) return;
     clearInterval(_poll);
-    injectCss();
 
-    new MutationObserver(debouncedInject).observe(document.documentElement, {
+    injectCss();
+    fixLayout();
+
+    /* Retry fixLayout a few times — VS Code may re-set inline styles */
+    [500, 1500, 3000, 6000].forEach(function(ms) {
+      setTimeout(function() { injectCss(); fixLayout(); }, ms);
+    });
+
+    /* MutationObserver: debounced re-apply on DOM/style changes */
+    new MutationObserver(debouncedApply).observe(document.documentElement, {
       childList: true, subtree: true,
       attributes: true, attributeFilter: ['style', 'class']
     });
 
-    /* Retry for 30 s (VS Code lazy-loads panels) */
+    /* Keep re-injecting CSS for 60s (VS Code lazy-loads panels) */
     var n = 0;
-    var iv = setInterval(function() { injectCss(); if (++n >= 30) clearInterval(iv); }, 1000);
+    var iv = setInterval(function() { injectCss(); if (++n >= 60) clearInterval(iv); }, 1000);
   }, 500);
 
   /* 2 ── Viewport ────────────────────────────────────────────────────────── */
@@ -234,8 +281,8 @@ String _buildVscodeJs() => r"""
   })();
 
   /* 3 ── Touch → Mouse bridge ─────────────────────────────────────────────
-     Fixes: command palette, context menus, dropdowns, quick-pick, copilot
-     chat buttons — all require real mousedown/mouseup/click events.
+     Required for: command palette, context menus, dropdowns, quick-pick,
+     copilot chat, tabs, dialog buttons — anything that needs real mouse events.
   ── */
   var INTERACTIVE = [
     '.quick-input-widget', '.context-menu', '.context-view',
@@ -246,7 +293,7 @@ String _buildVscodeJs() => r"""
     '[role="option"]', '[role="menuitem"]', '[role="button"]',
     '.suggest-widget .monaco-list-row', '.parameter-hints-widget',
     '.notification-list-item', '.monaco-dialog-box button',
-    '.tab', '.tab-close-button'
+    '.tab', '.tab-close-button', '.breadcrumb-item'
   ].join(',');
 
   function synth(type, touch, target) {
@@ -274,7 +321,7 @@ String _buildVscodeJs() => r"""
     }
   }, { passive: true });
 
-  /* Patch <select> elements (model picker uses native selects) */
+  /* Patch native <select> (model picker) */
   function patchSelects() {
     document.querySelectorAll('select').forEach(function(s) {
       s.style.pointerEvents = 'auto';
@@ -377,10 +424,10 @@ class _ViewerScreenState extends State<ViewerScreen>
             _title    = _titleFrom(url);
           });
           if (_isVSCode) {
-            // Inject immediately, then once more after a short delay in case
-            // VS Code reinitialises its DOM on first load.
+            // First inject: starts the workbench-ready poll inside the JS.
+            // Second inject at +4s: catches any late reinitialisation.
             await _inject();
-            await Future.delayed(const Duration(seconds: 3));
+            await Future.delayed(const Duration(seconds: 4));
             await _inject();
             _startBgService();
           }
