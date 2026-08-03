@@ -1,0 +1,81 @@
+name: Build & Deploy Web (GitHub Pages)
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Deploy reason'
+        required: false
+        default: 'manual'
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only one concurrent deployment
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  build-web:
+    name: Build Flutter Web
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.22.x"
+          channel: stable
+          cache: true
+
+      - name: Flutter version
+        run: flutter --version
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Analyze (non-fatal)
+        run: flutter analyze --no-fatal-infos
+        continue-on-error: true
+
+      # Generate web platform support if not committed
+      - name: Ensure web support
+        run: |
+          if [ ! -f web/index.html ]; then
+            flutter create --platforms=web . --no-overwrite
+          fi
+
+      - name: Build Flutter Web
+        run: |
+          flutter build web \
+            --release \
+            --base-href "/codespace-mobile/" \
+            --web-renderer canvaskit \
+            --no-tree-shake-icons
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/web
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build-web
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
