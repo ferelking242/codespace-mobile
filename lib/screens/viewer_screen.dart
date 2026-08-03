@@ -15,27 +15,25 @@ Future<void> _stopBgService() async {
 // ─── CSS ─────────────────────────────────────────────────────────────────────
 // NOTE: All !important rules are intentional — VS Code web injects its own
 // inline styles and we must override them unconditionally.
+// IMPORTANT: These rules must ONLY be applied after the monaco-workbench is
+// fully ready. Injecting during "Setting up your workspace" breaks VS Code's
+// layout initialisation and causes the page to hang indefinitely.
 const _vscodeCss = r"""
-/* ══ Codespace Mobile v1.3 ═════════════════════════════════════════════════ */
+/* ══ Codespace Mobile v1.4 ═════════════════════════════════════════════════ */
 
-/* ── CSS variables override ─────────────────────────────────────────────── */
-:root {
-  --activity-bar-width: 0px !important;
-  --activitybar-width: 0px !important;
-  --sidebar-width: 0px !important;
-}
+/* NOTE: No :root CSS-variable overrides here — VS Code reads those variables
+   during workbench boot and zeroing them during setup causes a layout deadlock
+   that leaves the page stuck on "Setting up your workspace". */
 
-/* ── Activity bar: NUCLEAR kill ─────────────────────────────────────────── */
-/* VS Code may use any of these selectors across versions */
-.part.activitybar,
-.activitybar.part,
+/* ── Activity bar: hide once workbench is ready ─────────────────────────── */
+/* Scoped to .monaco-workbench so rules are inert before the workbench mounts */
 .monaco-workbench .part.activitybar,
+.monaco-workbench .activitybar.part,
 .monaco-workbench > .part.activitybar,
-div.part.activitybar,
-[class*="activitybar"][class*="part"],
-#workbench\.parts\.activitybar,
-.activityBarContent,
-.activity-bar {
+.monaco-workbench div.part.activitybar,
+.monaco-workbench [class*="activitybar"][class*="part"],
+.monaco-workbench .activityBarContent,
+.monaco-workbench .activity-bar {
   display: none !important;
   width: 0 !important;
   min-width: 0 !important;
@@ -194,22 +192,51 @@ String _buildVscodeJs() => r"""
     el.textContent = CSS;
   }
 
-  injectCss();
+  /* ── Workbench-ready gate ───────────────────────────────────────────────
+     NEVER inject CSS before .monaco-workbench exists. Injecting during the
+     "Setting up your workspace" phase overrides VS Code's CSS variables and
+     causes the workbench layout engine to deadlock, leaving the page stuck.
+  ── */
+  function isWorkbenchReady() {
+    return !!document.querySelector('.monaco-workbench');
+  }
 
-  /* Re-inject whenever VS Code rebuilds the DOM */
-  new MutationObserver(function(muts) {
+  /* Debounced re-inject: coalesces rapid mutation bursts into one call */
+  var _debTimer = null;
+  function debouncedInject() {
+    if (!isWorkbenchReady()) return;
+    clearTimeout(_debTimer);
+    _debTimer = setTimeout(function() {
+      injectCss();
+      /* Force-remove activity bar inline style if VS Code re-adds width */
+      document.querySelectorAll('.monaco-workbench .part.activitybar, .monaco-workbench .activitybar.part').forEach(function(node) {
+        node.style.setProperty('display', 'none', 'important');
+        node.style.setProperty('width', '0', 'important');
+        node.style.setProperty('max-width', '0', 'important');
+      });
+    }, 150);
+  }
+
+  /* Poll for workbench ready, then inject once and start the observer */
+  var _readyPoll = setInterval(function() {
+    if (!isWorkbenchReady()) return;
+    clearInterval(_readyPoll);
     injectCss();
-    /* Force-remove activity bar inline style if VS Code re-adds width */
-    document.querySelectorAll('.part.activitybar, .activitybar.part').forEach(function(el) {
-      el.style.setProperty('display', 'none', 'important');
-      el.style.setProperty('width', '0', 'important');
-      el.style.setProperty('max-width', '0', 'important');
-    });
-  }).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['style','class'] });
 
-  /* Retry for 60s (VS Code lazy-loads components) */
-  var t = 0;
-  var cssIv = setInterval(function() { injectCss(); if (++t > 60) clearInterval(cssIv); }, 1000);
+    /* Re-inject when VS Code rebuilds the DOM — debounced to avoid cascade */
+    new MutationObserver(debouncedInject)
+      .observe(document.documentElement, {
+        childList: true, subtree: true,
+        attributes: true, attributeFilter: ['style', 'class']
+      });
+
+    /* Retry for 30s after workbench ready (lazy-loaded components) */
+    var t = 0;
+    var cssIv = setInterval(function() {
+      injectCss();
+      if (++t > 30) clearInterval(cssIv);
+    }, 1000);
+  }, 500);
 
   /* 2 ── Viewport ────────────────────────────────────────────────────────── */
   var meta = document.querySelector('meta[name=viewport]');
