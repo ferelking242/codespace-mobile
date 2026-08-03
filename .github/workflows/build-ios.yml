@@ -50,18 +50,21 @@ jobs:
       # ── 6. Patch Podfile: minimum iOS 14.0 (supports 15.8.5) ─────────────
       - name: Patch Podfile (iOS 14.0+)
         run: |
-          sed -i '' "s/# platform :ios, '12.0'/platform :ios, '14.0'/" ios/Podfile
-          sed -i '' "s/platform :ios, '[0-9.]*/platform :ios, '14.0/" ios/Podfile
-          # Force minimum deployment target
-          echo "" >> ios/Podfile
-          echo "post_install do |installer|" >> ios/Podfile
-          echo "  installer.pods_project.targets.each do |target|" >> ios/Podfile
-          echo "    flutter_additional_ios_build_settings(target)" >> ios/Podfile
-          echo "    target.build_configurations.each do |config|" >> ios/Podfile
-          echo "      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '14.0'" >> ios/Podfile
-          echo "    end" >> ios/Podfile
-          echo "  end" >> ios/Podfile
-          echo "end" >> ios/Podfile
+          # Set platform line
+          sed -i '' "s/# platform :ios, '[0-9.]*'/platform :ios, '14.0'/" ios/Podfile || true
+          sed -i '' "s/^platform :ios, '[0-9.]*'/platform :ios, '14.0'/" ios/Podfile || true
+          # Inject deployment target INSIDE the existing flutter post_install block
+          # (avoids "multiple post_install hooks" error)
+          awk '
+            /flutter_additional_ios_build_settings\(target\)/ {
+              print $0
+              print "      target.build_configurations.each do |config|"
+              print "        config.build_settings[\"IPHONEOS_DEPLOYMENT_TARGET\"] = \"14.0\""
+              print "      end"
+              next
+            }
+            { print }
+          ' ios/Podfile > /tmp/_Podfile && mv /tmp/_Podfile ios/Podfile
           cat ios/Podfile
 
       # ── 7. Patch Info.plist ───────────────────────────────────────────────
