@@ -1,0 +1,4 @@
+-keep class io.flutter.** { *; }
+-keep class com.codespace.mobile.** { *; }
+-keep class androidx.core.app.** { *; }
+-dontwarn io.flutter.**
