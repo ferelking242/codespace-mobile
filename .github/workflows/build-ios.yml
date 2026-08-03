@@ -45,7 +45,7 @@ jobs:
 
       # ── 5. Generate iOS platform (not committed to repo) ─────────────────
       - name: Create iOS platform
-        run: flutter create --platforms=ios . --no-overwrite
+        run: flutter create --org com.codespace --project-name codespace_mobile --platforms=ios . --no-overwrite
 
       # ── 6. Patch Podfile: minimum iOS 14.0 (supports 15.8.5) ─────────────
       - name: Patch Podfile (iOS 14.0+)
